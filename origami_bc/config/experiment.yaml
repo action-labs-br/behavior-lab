@@ -1,0 +1,30 @@
+experiment:
+  id: airplane_01
+  name: Learn to fold a paper airplane
+  version: 1
+  introduction: Use rectangular Letter paper. Photograph the whole sheet on a contrasting surface before each action. Keep the nose pointing away from you. Allow 5–10 minutes.
+steps:
+  - action_id: crease_center
+    title: Make the centre crease
+    instruction: Fold the sheet in half lengthwise, align the long edges, crease, then unfold. Keep the crease vertical.
+  - action_id: fold_left_corner
+    title: Fold the left corner
+    instruction: Bring the top-left corner inward until its top edge meets the centre crease.
+  - action_id: fold_right_corner
+    title: Fold the right corner
+    instruction: Bring the top-right corner inward until its top edge meets the centre crease. The top now forms a point.
+  - action_id: narrow_left_side
+    title: Narrow the left side
+    instruction: Fold the upper-left sloping edge inward to meet the centre crease.
+  - action_id: narrow_right_side
+    title: Narrow the right side
+    instruction: Fold the upper-right sloping edge inward to meet the centre crease.
+  - action_id: close_body
+    title: Close the airplane body
+    instruction: Fold the airplane in half along the centre crease, enclosing the previous folds. Lay it on its side with the nose pointing away from you.
+  - action_id: fold_first_wing
+    title: Fold the first wing
+    instruction: Fold the exposed wing down so its long sloping edge aligns with the bottom edge of the body. Leave this wing folded for the next photo.
+  - action_id: fold_second_wing
+    title: Finish the second wing
+    instruction: Turn the airplane over and fold the other wing to match. Open both wings slightly so the airplane is ready to fly.
