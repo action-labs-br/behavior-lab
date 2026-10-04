@@ -43,6 +43,8 @@ const PT_BR = {
   'Show the model an unfinished airplane. It only knows the configured actions; it cannot detect that you are finished.':'Mostre ao modelo um avião inacabado. Ele conhece apenas as ações configuradas e não consegue detectar que você terminou.',
   'New paper state':'Novo estado do papel', 'Predict next action':'Prever próxima ação',
   'These are model probabilities, not guarantees of correctness. Try a new background or an unfamiliar fold.':'Estas são probabilidades do modelo, não garantias de acerto. Experimente outro fundo ou uma dobra diferente.',
+  'Try a prediction':'Experimente uma previsão',
+  'Take a photo of a paper airplane state to see which fold the active model predicts next. Your photo is used for this prediction and is not added to the demonstrations.':'Tire uma foto de um estado do avião de papel para ver qual dobra o modelo ativo prevê em seguida. A foto será usada nesta previsão e não será adicionada às demonstrações.',
   'Demonstration gallery':'Galeria de demonstrações', 'Filter by action':'Filtrar por ação', 'All actions':'Todas as ações',
   'After the presentation':'Após a apresentação',
   'Delete participant records, runs and photos manually. Trained models are retained for reuse. Collection closes during cleanup.':'Exclua manualmente os registros dos participantes, as tentativas e as fotos. Os modelos treinados são mantidos para reutilização. A coleta é encerrada durante a limpeza.',

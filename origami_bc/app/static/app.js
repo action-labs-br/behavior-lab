@@ -178,19 +178,22 @@ action('train', async () => {
   await api('/api/train', {method:'POST', body:{holdout:selection === 'auto' ? null : selection === 'none' ? [] : [selection]}});
   await pollTraining();
 });
-action('predict', async () => {
-  const file = $('inference-photo').files[0]; if (!file) throw new Error(t('Choose a photo first'));
+async function predictFrom(inputId, outputId) {
+  const file = $(inputId).files[0]; if (!file) throw new Error(t('Choose a photo first'));
+  if (file.size > 10 * 1024 * 1024) throw new Error(t('Choose an image smaller than 10 MiB'));
   const result = await api('/api/predict', {method:'POST', body:file});
-  lastPrediction = result; renderPrediction();
-});
-function renderPrediction() {
-  const result = lastPrediction; if (!result) return;
-  $('prediction').replaceChildren(text('h3',actionTitle(result.prediction.action_id)), text('p',t('predictionModel', {source:t(result.source), id:result.model_version})));
+  lastPrediction = result; renderPrediction(outputId, result);
+}
+function renderPrediction(outputId, result = lastPrediction) {
+  if (!result) return;
+  $(outputId).replaceChildren(text('h3',actionTitle(result.prediction.action_id)), text('p',t('predictionModel', {source:t(result.source), id:result.model_version})));
   for (const item of result.probabilities) {
     const row = text('div','', 'probability'); const bar = document.createElement('meter'); bar.min=0; bar.max=1; bar.value=item.probability; bar.setAttribute('aria-label',actionTitle(item.action_id));
-    row.append(text('label', `${actionTitle(item.action_id)} — ${(item.probability*100).toFixed(1)}%`), bar); $('prediction').append(row);
+    row.append(text('label', `${actionTitle(item.action_id)} — ${(item.probability*100).toFixed(1)}%`), bar); $(outputId).append(row);
   }
 }
+action('predict', async () => { await predictFrom('inference-photo', 'prediction'); });
+action('participant-predict', async () => { await predictFrom('participant-inference-photo', 'participant-prediction'); });
 action('cleanup', async () => {
   const result = await api('/api/admin/cleanup', {method:'POST',body:{experiment_id:$('cleanup-confirm').value}});
   await refresh(); notice(result.message);
@@ -209,7 +212,7 @@ $('language').addEventListener('change', async () => {
     $('instruction-text').textContent = stepText(step, 'instruction');
     $('instruction-image').alt = t('Diagram for {action}', {action:stepText(step, 'title')});
   }
-  renderPrediction();
+  renderPrediction('prediction'); renderPrediction('participant-prediction');
   if (!$('admin-panel').hidden) {
     try { await refresh(); } catch(error) { notice(error.message); }
   }

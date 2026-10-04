@@ -423,7 +423,8 @@ def create_app(settings: Settings | None = None, encoder=None) -> FastAPI:
 
     @app.post("/api/predict")
     async def predict(request: Request):
-        admin(request)
+        if not request.session.get("admin"):
+            participant(request)
         data = normalize_image(await read_image(request))
         # Run CPU inference off the event loop to keep collection/health responsive.
         from starlette.concurrency import run_in_threadpool
