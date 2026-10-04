@@ -279,7 +279,7 @@ def create_app(settings: Settings | None = None, encoder=None) -> FastAPI:
         with locked(repo, "dataset"):
             collecting()
             run = owned_run(request, run_id)
-            if step_index < run["step_index"]:
+            if step_index < run["step_index"] or (run["status"] == "COMPLETE" and step_index == run["step_index"]):
                 return run
             sample = repo.get(f"sample#{run_id}-{step_index}")
             if step_index != run["step_index"] or not sample or sample["status"] != "READY":

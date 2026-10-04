@@ -18,6 +18,8 @@ uvicorn app.main:create_app --factory --host 127.0.0.1 --port 8080
 
 Open <http://127.0.0.1:8080>. Local defaults: event code `ORIGAMI42`; presenter password `local-admin` at `/admin`. These are development defaults. Production rejects them. Local metadata is SQLite and images/models are files under `.local/`; a restart preserves both. No AWS credentials are needed locally.
 
+Common commands are available through `make`: `make venv` creates and installs the local environment, `source .venv/bin/activate` loads it into your shell, `make run` starts the local server, `make test` runs tests and checks the frontend JavaScript, and `make deploy` tests, builds, updates, and verifies an already provisioned ECS Express Mode deployment. Deployment requires the AWS CLI, Docker Buildx, valid AWS credentials, and deployment state under `.deploy/`.
+
 The encoder smoke command downloads ImageNet weights on its first run. The Docker build performs that download ahead of deployment. Keep `TORCH_HOME` the same for the smoke command and server. CPU-only inference is used.
 
 ## Language

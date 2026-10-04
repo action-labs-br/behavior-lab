@@ -49,10 +49,15 @@ def upload(client, run_id, index, data=None):
 
 def complete_run(client):
     run = client.post('/api/runs').json()
-    for index in range(8):
-        assert upload(client, run['id'], index).status_code == 200
-        response = client.post(f"/api/runs/{run['id']}/advance/{index}")
-        assert response.status_code == 200
+    steps = client.get('/api/experiment').json()['steps']
+    assert upload(client, run['id'], 0).status_code == 200
+    for index in range(len(steps)):
+        response = client.post(f"/api/runs/{run['id']}/confirm/{index}")
+        assert response.status_code == 200, response.text
+        if index + 1 < len(steps):
+            assert upload(client, run['id'], index + 1).json()['action_id'] == steps[index + 1]['action_id']
+            response = client.post(f"/api/runs/{run['id']}/advance/{index}")
+            assert response.status_code == 200, response.text
     assert response.json()['status'] == 'COMPLETE'
     return run
 
@@ -61,19 +66,48 @@ def test_order_ownership_retry_and_restart(system):
     settings, app, client = system
     join(client)
     run = client.post('/api/runs').json()
+    assert run['stage'] == 'CURRENT_PHOTO'
     assert client.post('/api/runs').json()['id'] == run['id']
     assert client.post(f"/api/runs/{run['id']}/advance/0").status_code == 409
+    assert client.post(f"/api/runs/{run['id']}/confirm/0").status_code == 409
     assert client.post('/api/samples', json={'run_id':run['id'], 'step_index':1, 'content_type':'image/png'}).status_code == 409
     assert upload(client, run['id'], 0, b'broken').status_code == 400
     assert upload(client, run['id'], 0).json()['action_id'] == 'crease_center'
+    assert client.get('/api/runs/'+run['id']).json()['stage'] == 'ACTION'
+    assert client.post(f"/api/runs/{run['id']}/advance/0").status_code == 409
+    assert client.post(f"/api/runs/{run['id']}/confirm/1").status_code == 409
+    assert client.post(f"/api/runs/{run['id']}/confirm/0").json()['stage'] == 'NEXT_PHOTO'
+    assert client.post(f"/api/runs/{run['id']}/confirm/0").json()['stage'] == 'NEXT_PHOTO'
+    assert client.post(f"/api/runs/{run['id']}/advance/0").status_code == 409
+    assert upload(client, run['id'], 1).json()['action_id'] == 'fold_left_corner'
+    state = client.get('/api/runs/'+run['id']).json()
+    assert state['stage'] == 'NEXT_PHOTO'
+    assert state['next_sample']['status'] == 'READY'
+    assert client.get(f"/api/samples/{run['id']}-1/image").status_code == 200
     assert client.post(f"/api/runs/{run['id']}/advance/0").json()['step_index'] == 1
     assert client.post(f"/api/runs/{run['id']}/advance/0").json()['step_index'] == 1
     other = TestClient(app, headers={'X-Origami-Request':'1'})
     join(other, 'Bob')
     assert other.get('/api/runs/'+run['id']).status_code == 404
+    assert other.get(f"/api/samples/{run['id']}-1/image").status_code == 404
     restarted = TestClient(create_app(settings, encoder=features), headers={'X-Origami-Request':'1'})
     restarted.cookies.update(client.cookies)
-    assert restarted.get('/api/runs/'+run['id']).json()['step_index'] == 1
+    state = restarted.get('/api/runs/'+run['id']).json()
+    assert state['step_index'] == 1
+    assert state['stage'] == 'ACTION'
+
+
+def test_final_fold_confirmation_retry(system):
+    _, app, client = system
+    join(client)
+    run = complete_run(client)
+    completed = client.get('/api/runs/'+run['id']).json()
+    retry = client.post(f"/api/runs/{run['id']}/confirm/7")
+    assert retry.status_code == 200
+    assert retry.json()['completed_at'] == completed['completed_at']
+    assert len(app.state.repo.list('sample#')) == 8
+    assert completed['next_sample'] is None
+    assert client.post(f"/api/runs/{run['id']}/advance/7").status_code == 409
 
 
 def test_training_holdout_fallback_failure_cleanup(system):
@@ -99,6 +133,17 @@ def test_training_holdout_fallback_failure_cleanup(system):
     assert len(prediction['probabilities']) == 8
     assert sum(item['probability'] for item in prediction['probabilities']) == pytest.approx(1)
     assert prediction['source'] == 'fallback'
+    participant_client = TestClient(app, headers={'X-Origami-Request':'1'})
+    join(participant_client, 'Carol')
+    records_before = app.state.repo.list('sample#')
+    objects_before = sorted(path for path in (settings.data_dir/'objects').rglob('*') if path.is_file())
+    participant_prediction = participant_client.post('/api/predict', content=photo())
+    assert participant_prediction.status_code == 200
+    assert participant_prediction.json() == prediction
+    assert app.state.repo.list('sample#') == records_before
+    assert sorted(path for path in (settings.data_dir/'objects').rglob('*') if path.is_file()) == objects_before
+    assert participant_client.get('/api/models').status_code == 403
+    assert participant_client.post('/api/train', json={}).status_code == 403
     assert client.post('/api/train', json={'holdout':[alice,bob]}).status_code == 202
     assert client.get('/api/train/status').json()['status'] == 'FAILED'
     assert client.get('/api/dataset/stats').json()['active']['id'] == version
@@ -119,8 +164,11 @@ def test_boundaries_and_exclusion(system):
     assert TestClient(app).post('/api/session/join',json={}).status_code == 403
     assert client.get('/api/samples').status_code == 403
     assert client.post('/api/train',json={}).status_code == 403
+    assert client.post('/api/predict', content=photo()).status_code == 401
     assert client.post('/api/session/join',json={'display_name':'Alice','event_code':'wrong'}).status_code == 403
     join(client)
+    assert client.post('/api/predict', content=photo()).status_code == 409
+    assert client.post('/api/predict', content=b'broken').status_code == 400
     run = complete_run(client)
     admin(client)
     client.post(f"/api/samples/{run['id']}-0/exclude")
