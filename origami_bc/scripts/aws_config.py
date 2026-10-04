@@ -22,6 +22,18 @@ for suffix, service in [('task','ecs-tasks.amazonaws.com'), ('infra','ecs.amazon
                         ('runner','tasks.apprunner.amazonaws.com'), ('ecr','build.apprunner.amazonaws.com')]:
     save(f'trust-{suffix}.json', {'Version':'2012-10-17','Statement':[{
         'Effect':'Allow','Principal':{'Service':service},'Action':'sts:AssumeRole'}]})
+task_trust = json.loads((out / 'trust-task.json').read_text())
+task_trust['Statement'][0]['Condition'] = {
+    'StringEquals': {'aws:SourceAccount': account},
+    'ArnLike': {'aws:SourceArn': f'arn:aws:ecs:{region}:{account}:*'},
+}
+save('trust-task.json', task_trust)
+save('infra-extra-policy.json', {'Version':'2012-10-17','Statement':[
+    {'Effect':'Allow','Action':['ecs:DescribeServices','ecs:UpdateService'],
+     'Resource':f'arn:aws:ecs:{region}:{account}:service/{name}/{name}'},
+    {'Effect':'Allow','Action':['ec2:DescribeAccountAttributes','cloudwatch:DescribeAlarms'],
+     'Resource':'*','Condition':{'StringEquals':{'aws:RequestedRegion':region}}}
+]})
 save('app-policy.json', {'Version':'2012-10-17','Statement':[
     {'Effect':'Allow','Action':['s3:ListBucket'],'Resource':f'arn:aws:s3:::{bucket}',
      'Condition':{'StringLike':{'s3:prefix':['experiments/airplane_01/*']}}},
@@ -29,7 +41,7 @@ save('app-policy.json', {'Version':'2012-10-17','Statement':[
      'Resource':f'arn:aws:s3:::{bucket}/experiments/airplane_01/*'},
     {'Effect':'Allow','Action':['dynamodb:GetItem','dynamodb:PutItem','dynamodb:DeleteItem','dynamodb:Query'],
      'Resource':f'arn:aws:dynamodb:{region}:{account}:table/{table}',
-     'Condition':{'ForAllValues:StringEquals':{'dynamodb:LeadingKeys':['airplane_01']}}}
+     'Condition':{'ForAllValues:StringEquals':{'dynamodb:LeadingKeys':['airplane_01']}, 'Null':{'dynamodb:LeadingKeys':'false'}}}
 ]})
 secrets = {key: os.environ.get(key+'_ARN','') for key in ('SESSION_SECRET','EVENT_CODE','ADMIN_PASSWORD')}
 if all(secrets.values()):

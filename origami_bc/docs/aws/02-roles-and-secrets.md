@@ -13,7 +13,11 @@ aws iam attach-role-policy --role-name "$APP_NAME-execution" \
 aws iam create-role --role-name "$APP_NAME-infra" --assume-role-policy-document file://.deploy/trust-infra.json
 aws iam attach-role-policy --role-name "$APP_NAME-infra" \
   --policy-arn arn:aws:iam::aws:policy/service-role/AmazonECSInfrastructureRoleforExpressGatewayServices
+aws iam put-role-policy --role-name "$APP_NAME-infra" --policy-name ExpressGatewaySupplement \
+  --policy-document file://.deploy/infra-extra-policy.json
 ```
+
+The supplement covers operations denied during the initial deployment with the managed policy: service inspection/update on this exact ECS service, plus account-attribute and alarm reads restricted to the deployment region. It grants no additional data access.
 
 Create secrets without placing their values in shell history. Files are temporary and owner-readable only. The generated session signing key should remain stable across deployments. Choose a non-default event code and an admin password of at least 12 characters. The app receives plaintext values from Secrets Manager at container startup; it never stores these values in application metadata.
 

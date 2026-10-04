@@ -20,6 +20,10 @@ Open <http://127.0.0.1:8080>. Local defaults: event code `ORIGAMI42`; presenter 
 
 The encoder smoke command downloads ImageNet weights on its first run. The Docker build performs that download ahead of deployment. Keep `TORCH_HOME` the same for the smoke command and server. CPU-only inference is used.
 
+## Language
+
+Use the **Language / Idioma** selector in the header to choose English or Português (Brasil). The choice is remembered in the browser and defaults to Portuguese for Portuguese-language browsers. Participant instructions, presenter controls, and model action labels follow the selected language. Switching languages preserves the current step and selected photo. Translations are in `app/static/i18n.js`; stored action IDs stay the same in both languages.
+
 ## Presentation workflow
 
 1. Use rectangular paper. Capture the current paper state, confirm upload, then perform the revealed action. Finish each action before advancing. A browser refresh preserves the current run; click **Start or resume**.
@@ -40,8 +44,12 @@ Separate Markdown runbooks contain the commands to provision resources:
 3. [ECS Express Mode deployment](docs/aws/03-ecs-deployment.md)
 4. [App Runner alternative for existing customers](docs/aws/04-apprunner-existing-customers.md)
 5. [Manual cleanup and teardown](docs/aws/05-cleanup.md)
+6. [Private environment records](docs/aws/06-deployed-environment.md)
+7. [Redeployment and rollback](docs/aws/07-redeployment.md)
 
-Nothing is deployed automatically. AWS documents App Runner's closure to new customers; ECS Express Mode is the documented alternative. Both use the same container, private S3 objects, and DynamoDB metadata.
+The resumable foundation script is `python3 scripts/provision_aws.py --profile your-demo-profile --region us-east-1`. It provisions the storage, registry, secrets, roles, and cluster; deployment details go into `.deploy/deployment.json` and generated app credentials into the private `.deploy/access.json`. The AWS CLI profile is used only for provisioning, while the running application uses its ECS task role.
+
+Nothing is deployed automatically by starting the local app. AWS documents App Runner's closure to new customers; ECS Express Mode is the documented alternative. Both use the same container, private S3 objects, and DynamoDB metadata.
 
 AWS configuration: `APP_ENV=production`, `STORAGE_BACKEND=aws`, `AWS_REGION`, `S3_BUCKET`, `DYNAMODB_TABLE`, `SESSION_SECRET`, `EVENT_CODE`, `ADMIN_PASSWORD`. Optional local overrides: `DATA_DIR`, `EXPERIMENT_CONFIG`, `TORCH_HOME`. Secrets are injected from Secrets Manager, not committed. The app implements same-origin mutation protection via a required request header, signed HttpOnly session cookies, separate admin authorization, and production Secure cookies.
 

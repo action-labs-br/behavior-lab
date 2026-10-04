@@ -44,6 +44,7 @@ aws iam delete-role-policy --role-name "$APP_NAME-execution" --policy-name AppSe
 aws iam detach-role-policy --role-name "$APP_NAME-execution" --policy-arn arn:aws:iam::aws:policy/service-role/AmazonECSTaskExecutionRolePolicy
 aws iam delete-role --role-name "$APP_NAME-execution"
 aws iam detach-role-policy --role-name "$APP_NAME-infra" --policy-arn arn:aws:iam::aws:policy/service-role/AmazonECSInfrastructureRoleforExpressGatewayServices
+aws iam delete-role-policy --role-name "$APP_NAME-infra" --policy-name ExpressGatewaySupplement
 aws iam delete-role --role-name "$APP_NAME-infra"
 ```
 

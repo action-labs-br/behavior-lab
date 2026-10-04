@@ -7,3 +7,12 @@ __pycache__/
 .deploy/
 *.pth
 *.joblib
+
+# Local credentials, deployment records, and generated artifacts
+.env.*
+!.env.example
+.aws/
+*.secret
+*.pem
+*.key
+awscliv2.zip

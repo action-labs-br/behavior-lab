@@ -52,6 +52,14 @@ aws ecr create-repository --repository-name "$APP_NAME" \
 python3 scripts/aws_config.py
 ```
 
+For a resumable foundation deployment (storage, registry, secrets, roles, and cluster), you can instead run:
+
+```bash
+python3 scripts/provision_aws.py --profile your-demo-profile --region us-east-1
+```
+
+The script checks existing resources, records non-secret deployment details in `.deploy/deployment.json`, and stores generated app credentials in the ignored, owner-readable `.deploy/access.json`. It does not build the image or start the service.
+
 Continue with [roles and secrets](02-roles-and-secrets.md).
 
 References: [S3 create-bucket](https://docs.aws.amazon.com/cli/latest/reference/s3api/create-bucket.html), [DynamoDB create-table](https://docs.aws.amazon.com/cli/latest/reference/dynamodb/create-table.html), [ECR create-repository](https://docs.aws.amazon.com/cli/latest/reference/ecr/create-repository.html).
