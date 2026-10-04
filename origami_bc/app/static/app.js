@@ -1,5 +1,5 @@
 const $ = (id) => document.getElementById(id);
-let experiment, run, samples = [], participants = [], previewURL, sessionParticipant, lastPrediction, lastTraining, lastNotice = "";
+let experiment, run, samples = [], participants = [], previewURL, nextPreviewURL, sessionParticipant, lastPrediction, lastTraining, lastNotice = "";
 const show = (id, visible = true) => { $(id).hidden = !visible; };
 const notice = (text = '') => { lastNotice = text; $('notice').textContent = translateError(text); };
 async function api(path, options = {}) {
@@ -51,13 +51,25 @@ async function renderRun() {
   show('start', false); show('finished', finished); show('fold', !finished);
   if (finished) return;
   const step = experiment.steps[run.step_index];
+  const stage = run.stage || (run.sample?.status === 'READY' ? 'ACTION' : 'CURRENT_PHOTO');
   $('step-label').textContent = t('step', {current:run.step_index + 1, total:experiment.steps.length});
   $('step-progress').max = experiment.steps.length; $('step-progress').value = run.step_index;
   $('step-title').textContent = stepText(step, 'title');
   $('instruction-text').textContent = stepText(step, 'instruction');
-  const ready = run.sample?.status === 'READY';
-  show('instruction', ready); show('capture-label', !ready); show('upload', !ready); show('capture-prompt', !ready);
+  const diagrams = {crease_center:'01', fold_left_corner:'02', fold_right_corner:'02', narrow_left_side:'03', narrow_right_side:'03', close_body:'04', fold_first_wing:'05', fold_second_wing:'06'};
+  $('instruction-image').src = `/static/instructions/How-to-Make-a-Paper-Airplane-${diagrams[step.action_id]}.jpg`;
+  $('instruction-image').alt = t('Diagram for {action}', {action:stepText(step, 'title')});
+  show('current-photo', stage === 'CURRENT_PHOTO');
+  show('instruction', stage !== 'CURRENT_PHOTO');
+  show('confirm-action', stage === 'ACTION');
+  show('next-state', stage === 'NEXT_PHOTO');
   $('photo').value = ''; $('upload').disabled = true; show('preview', false);
+  if (nextPreviewURL) URL.revokeObjectURL(nextPreviewURL);
+  nextPreviewURL = null;
+  $('next-photo').value = ''; $('upload-next').disabled = true;
+  const nextReady = run.next_sample?.status === 'READY';
+  if (nextReady) $('next-preview').src = `/api/samples/${run.next_sample.id}/image`;
+  show('next-preview', nextReady); show('advance', stage === 'NEXT_PHOTO' && nextReady);
 }
 async function start() { run = await api('/api/runs', {method:'POST'}); await renderRun(); }
 form('join-form', '/api/session/join', async () => { await boot(); await start(); });
@@ -67,14 +79,13 @@ action('start', start); action('again', start);
 $('photo').addEventListener('change', () => {
   const file = $('photo').files[0]; $('upload').disabled = !file;
   if (previewURL) URL.revokeObjectURL(previewURL);
-  if (file) { previewURL = URL.createObjectURL(file); $('preview').src = previewURL, sessionParticipant, lastPrediction, lastTraining, lastNotice = ""; }
+  if (file) { previewURL = URL.createObjectURL(file); $('preview').src = previewURL; }
   show('preview', !!file);
 });
-action('upload', async () => {
-  const file = $('photo').files[0];
+async function uploadSample(file, stepIndex) {
   if (!file) throw new Error(t('Choose a photo first'));
   if (file.size > 10 * 1024 * 1024) throw new Error(t('Choose an image smaller than 10 MiB'));
-  const {sample, upload} = await api('/api/samples', {method:'POST', body:{run_id:run.id, step_index:run.step_index, content_type:file.type}});
+  const {sample, upload} = await api('/api/samples', {method:'POST', body:{run_id:run.id, step_index:stepIndex, content_type:file.type}});
   if (upload) {
     let response;
     if (upload.fields) {
@@ -87,7 +98,16 @@ action('upload', async () => {
     await api(`/api/samples/${sample.id}/complete`, {method:'POST'});
   }
   await renderRun();
+}
+action('upload', async () => { await uploadSample($('photo').files[0], run.step_index); });
+$('next-photo').addEventListener('change', () => {
+  const file = $('next-photo').files[0]; $('upload-next').disabled = !file;
+  if (nextPreviewURL) URL.revokeObjectURL(nextPreviewURL);
+  if (file) { nextPreviewURL = URL.createObjectURL(file); $('next-preview').src = nextPreviewURL; }
+  show('next-preview', !!file);
 });
+action('upload-next', async () => { await uploadSample($('next-photo').files[0], run.step_index + 1); });
+action('confirm-action', async () => { await api(`/api/runs/${run.id}/confirm/${run.step_index}`, {method:'POST'}); await renderRun(); });
 action('advance', async () => { await api(`/api/runs/${run.id}/advance/${run.step_index}`, {method:'POST'}); await renderRun(); });
 function gallery() {
   $('gallery').replaceChildren();
@@ -187,6 +207,7 @@ $('language').addEventListener('change', async () => {
     $('step-label').textContent = t('step', {current:run.step_index + 1, total:experiment.steps.length});
     $('step-title').textContent = stepText(step, 'title');
     $('instruction-text').textContent = stepText(step, 'instruction');
+    $('instruction-image').alt = t('Diagram for {action}', {action:stepText(step, 'title')});
   }
   renderPrediction();
   if (!$('admin-panel').hidden) {

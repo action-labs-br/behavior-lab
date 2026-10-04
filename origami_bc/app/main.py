@@ -119,6 +119,12 @@ def create_app(settings: Settings | None = None, encoder=None) -> FastAPI:
         owned_run(request, sample["run_id"])
         return sample
 
+    def run_stage(run: dict) -> str:
+        if run.get("stage"):
+            return run["stage"]
+        sample = repo.get(f"sample#{run['id']}-{run['step_index']}")
+        return "ACTION" if sample and sample["status"] == "READY" else "CURRENT_PHOTO"
+
     async def read_image(request: Request) -> bytes:
         chunks, size = [], 0
         async for chunk in request.stream():
@@ -190,28 +196,36 @@ def create_app(settings: Settings | None = None, encoder=None) -> FastAPI:
             if existing:
                 return existing[0]
             run = {"id": uuid4().hex, "participant_id": owner["id"], "status": "ACTIVE",
-                   "step_index": 0, "created_at": now(), "fingerprint": experiment["fingerprint"]}
+                   "step_index": 0, "stage": "CURRENT_PHOTO", "created_at": now(),
+                   "fingerprint": experiment["fingerprint"]}
             repo.put("run#" + run["id"], run)
             return run
 
     @app.get("/api/runs/{run_id}")
     def get_run(run_id: str, request: Request):
         run = owned_run(request, run_id)
-        return {**run, "sample": repo.get(f"sample#{run_id}-{run['step_index']}")}
+        index = run["step_index"]
+        return {**run, "stage": run_stage(run), "sample": repo.get(f"sample#{run_id}-{index}"),
+                "next_sample": repo.get(f"sample#{run_id}-{index + 1}") if index + 1 < len(experiment["steps"]) else None}
 
     @app.post("/api/samples")
     def sample_create(data: SampleInput, request: Request):
         with locked(repo, "dataset"):
             collecting()
             run = owned_run(request, data.run_id)
-            if run["status"] != "ACTIVE" or run["step_index"] != data.step_index:
-                raise HTTPException(409, "Upload must match the current step")
-            if data.content_type not in {"image/jpeg", "image/png"}:
-                raise ValueError("Choose JPEG or PNG; convert HEIC before uploading")
+            if run["status"] != "ACTIVE" or data.step_index < 0 or data.step_index >= len(experiment["steps"]):
+                raise HTTPException(409, "There is no paper state to upload at this step")
             identifier = f"{run['id']}-{data.step_index}"
             sample = repo.get("sample#" + identifier)
             if sample and sample["status"] == "READY":
                 return {"sample": sample, "upload": None}
+            stage = run_stage(run)
+            current_photo = data.step_index == run["step_index"] and stage == "CURRENT_PHOTO"
+            next_photo = data.step_index == run["step_index"] + 1 and stage == "NEXT_PHOTO"
+            if not (current_photo or next_photo):
+                raise HTTPException(409, "Upload must match the current step")
+            if data.content_type not in {"image/jpeg", "image/png"}:
+                raise ValueError("Choose JPEG or PNG; convert HEIC before uploading")
             sample = {"id": identifier, "participant_id": run["participant_id"], "run_id": run["id"],
                       "step_index": data.step_index, "action_id": experiment["steps"][data.step_index]["action_id"],
                       "status": "PENDING_UPLOAD", "excluded": False, "created_at": now(),
@@ -254,7 +268,30 @@ def create_app(settings: Settings | None = None, encoder=None) -> FastAPI:
             sample["status"] = "READY"
             repo.put("sample#" + sample_id, sample)
             objects.delete(sample["raw_key"])
+            run = repo.get("run#" + sample["run_id"])
+            if sample["step_index"] == run["step_index"] and run_stage(run) == "CURRENT_PHOTO":
+                run["stage"] = "ACTION"
+                repo.put("run#" + run["id"], run)
             return sample
+
+    @app.post("/api/runs/{run_id}/confirm/{step_index}")
+    def confirm_action(run_id: str, step_index: int, request: Request):
+        with locked(repo, "dataset"):
+            collecting()
+            run = owned_run(request, run_id)
+            if step_index < run["step_index"]:
+                return run
+            sample = repo.get(f"sample#{run_id}-{step_index}")
+            if step_index != run["step_index"] or not sample or sample["status"] != "READY":
+                raise HTTPException(409, "Upload the current paper state before performing this fold")
+            if run_stage(run) not in {"ACTION", "NEXT_PHOTO"}:
+                raise HTTPException(409, "Complete the current run step first")
+            if step_index == len(experiment["steps"]) - 1:
+                run.update(status="COMPLETE", completed_at=now())
+            else:
+                run["stage"] = "NEXT_PHOTO"
+            repo.put("run#" + run_id, run)
+            return run
 
     @app.post("/api/runs/{run_id}/advance/{step_index}")
     def advance(run_id: str, step_index: int, request: Request):
@@ -263,12 +300,12 @@ def create_app(settings: Settings | None = None, encoder=None) -> FastAPI:
             run = owned_run(request, run_id)
             if step_index < run["step_index"]:  # Safe retry after a lost response.
                 return run
-            sample = repo.get(f"sample#{run_id}-{step_index}")
-            if step_index != run["step_index"] or not sample or sample["status"] != "READY":
-                raise HTTPException(409, "Confirm the photo before performing and completing the fold")
+            sample = repo.get(f"sample#{run_id}-{step_index + 1}")
+            if (step_index != run["step_index"] or run_stage(run) != "NEXT_PHOTO"
+                    or not sample or sample["status"] != "READY"):
+                raise HTTPException(409, "Upload the folded paper state before moving to the next fold")
             run["step_index"] += 1
-            if run["step_index"] == len(experiment["steps"]):
-                run.update(status="COMPLETE", completed_at=now())
+            run["stage"] = "ACTION"
             repo.put("run#" + run_id, run)
             return run
 
@@ -290,8 +327,10 @@ def create_app(settings: Settings | None = None, encoder=None) -> FastAPI:
 
     @app.get("/api/samples/{sample_id}/image")
     def sample_image(sample_id: str, request: Request):
-        admin(request)
-        sample = repo.get("sample#" + sample_id)
+        if request.session.get("admin"):
+            sample = repo.get("sample#" + sample_id)
+        else:
+            sample = owned_sample(request, sample_id)
         if not sample or sample["status"] != "READY":
             raise HTTPException(404)
         return Response(objects.get(sample["image_key"]), media_type="image/jpeg")
