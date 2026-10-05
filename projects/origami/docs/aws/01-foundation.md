@@ -1,6 +1,6 @@
 # 1. AWS foundation: private storage and image registry
 
-Run these commands yourself from `origami/`, in Bash. These guides create billable resources; nothing is provisioned merely by running the local app. Use a dedicated demo account or resource names. Commands are for a fresh deployment and are not generally idempotent. Keep the exported variables in the same shell through all guides. No custom domain is needed.
+Run these commands yourself from `projects/origami/`, in Bash. These guides create billable resources; nothing is provisioned merely by running the local app. Use a dedicated demo account or resource names. Commands are for a fresh deployment and are not generally idempotent. Keep the exported variables in the same shell through all guides. No custom domain is needed.
 
 App Runner stopped accepting new customers on April 30, 2026. The default guide uses ECS Express Mode; the separate App Runner guide is only for eligible existing customers. [AWS availability notice](https://docs.aws.amazon.com/apprunner/latest/dg/apprunner-availability-change.html)
 

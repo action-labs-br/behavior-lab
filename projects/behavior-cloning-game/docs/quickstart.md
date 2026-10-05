@@ -4,7 +4,7 @@ This project teaches **behavior cloning**: record how a person moves the blue ci
 
 ## 1. Set up
 
-From the repository root (Python 3.11–3.13):
+From the Behavior Cloning Game project root (Python 3.11–3.13):
 
 ```bash
 python3 -m venv venv

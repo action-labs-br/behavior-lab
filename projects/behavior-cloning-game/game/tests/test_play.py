@@ -41,6 +41,7 @@ class ResumeCollectionTests(unittest.TestCase):
         dataset = (
             Path(__file__).parents[1]
             / "data"
+            / "fixtures"
             / "demonstrations_20241218_161040.csv"
         )
         with patch.object(play, "Game") as game_type:

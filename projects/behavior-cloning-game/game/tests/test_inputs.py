@@ -36,6 +36,7 @@ class FromModelTests(unittest.TestCase):
         checkpoint = (
             Path(__file__).parents[1]
             / "data"
+            / "fixtures"
             / "demonstrations_20241218_172133.pth"
         )
 
