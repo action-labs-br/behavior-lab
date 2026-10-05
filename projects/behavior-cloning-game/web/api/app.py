@@ -196,6 +196,7 @@ class TrainingRunCreate(BaseModel):
         "absolute", "relative-center", "relative-containment"
     ] = "absolute"
     seed: int = Field(default=42, ge=0, le=2_147_483_647)
+    drop_noop: bool = False
 
 
 class EvaluationCreate(BaseModel):
@@ -382,7 +383,17 @@ def train_in_background(run_id: str, dataset: dict[str, Any], config: dict[str, 
                 record["progress"]["validation_loss"].append(validation_loss)
                 persist_run(record)
 
-            result = train_policy(rows, training_config, progress=report_progress)
+            downsampler = None
+            if config.get("drop_noop", False):
+                from util.downsampling import load_downsampler
+
+                downsampler = load_downsampler("drop-noop")
+            result = train_policy(
+                rows,
+                training_config,
+                progress=report_progress,
+                downsampler=downsampler,
+            )
             latest = store.get_json(run_key(dataset["project_id"], run_id))
             if cancellation.is_set() or (latest and latest.get("status") in {"cancel_requested", "cancelled"}):
                 raise TrainingCancelled
@@ -615,6 +626,7 @@ def create_training_run(dataset_id: str, payload: TrainingRunCreate) -> dict[str
             "preset": payload.preset,
             "feature_transform": payload.feature_transform,
             "seed": payload.seed,
+            "drop_noop": payload.drop_noop,
             "epochs": config.epochs,
         },
         "progress": {"epoch": 0, "epochs_total": config.epochs, "train_loss": [], "validation_loss": []},
@@ -622,7 +634,12 @@ def create_training_run(dataset_id: str, payload: TrainingRunCreate) -> dict[str
     }
     persist_run(run)
     write_index("training_run", run_id, run_key(run["project_id"], run_id))
-    config = {"preset": payload.preset, "feature_transform": payload.feature_transform, "seed": payload.seed}
+    config = {
+        "preset": payload.preset,
+        "feature_transform": payload.feature_transform,
+        "seed": payload.seed,
+        "drop_noop": payload.drop_noop,
+    }
     if os.environ.get("BEHAVIOR_LAB_TRAINING_QUEUE_URL"):
         try:
             enqueue_training_message(run_id)
@@ -812,3 +829,41 @@ def download_dataset(dataset_id: str) -> Response:
         io.BytesIO(content), media_type="text/csv",
         headers={"Content-Disposition": f'attachment; filename="{filename}.csv"'},
     )
+
+
+@app.get("/api/v1/datasets/{dataset_id}/metrics")
+def get_dataset_metrics(dataset_id: str) -> dict[str, Any]:
+    found = find_record("dataset", dataset_id)
+    if found is None:
+        raise HTTPException(status_code=404, detail="Dataset not found")
+    content = store.get_bytes(found[1]["object_key"])
+    if content is None:
+        raise HTTPException(status_code=404, detail="Dataset file not found")
+
+    action_counts: dict[str, int] = {}
+    no_op_count = 0
+    episode_outcomes: dict[str, str] = {}
+    sample_count = 0
+    for row in csv.DictReader(io.StringIO(content.decode("utf-8"))):
+        sample_count += 1
+        action_x = float(row["action_x"])
+        action_y = float(row["action_y"])
+        action = f"({action_x:g}, {action_y:g})"
+        action_counts[action] = action_counts.get(action, 0) + 1
+        if action_x == 0 and action_y == 0:
+            no_op_count += 1
+        episode_outcomes[row["episode_id"]] = row["outcome"]
+
+    outcomes: dict[str, int] = {}
+    for outcome in episode_outcomes.values():
+        outcomes[outcome] = outcomes.get(outcome, 0) + 1
+    return {
+        "samples": sample_count,
+        "episodes": len(episode_outcomes),
+        "no_op_ratio": no_op_count / sample_count if sample_count else 0,
+        "outcomes": outcomes,
+        "action_histogram": [
+            {"action": action, "count": count}
+            for action, count in sorted(action_counts.items(), key=lambda item: (-item[1], item[0]))
+        ],
+    }

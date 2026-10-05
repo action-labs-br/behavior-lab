@@ -59,6 +59,7 @@ def handler(event: dict[str, Any], _context: Any) -> dict[str, Any]:
                     "preset": run["preset"],
                     "feature_transform": run["config"]["feature_transform"],
                     "seed": run["config"]["seed"],
+                    "drop_noop": run["config"].get("drop_noop", False),
                 },
             )
         except Exception:
