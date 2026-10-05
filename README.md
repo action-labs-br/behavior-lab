@@ -80,6 +80,7 @@ are intentional fixtures.
 - `behavior_cloning_game/` provides the guided menu and packaged command-line entry
   point.
 - `game/` contains the collection, inspection, training, and evaluation scripts.
+- `web/` contains the browser learning lab and its local-first API.
 - `game/util/` contains reusable game, data, feature, model, and evaluation logic.
 - `game/tests/` and `tests/` contain the automated test suites.
 - `docs/` contains the [guided lessons](docs/lessons.md),
@@ -87,6 +88,63 @@ are intentional fixtures.
 
 See the [game workflow guide](game/readme.md) for data semantics, training controls,
 feature transforms, and downsampling plugins.
+
+## Web learning lab
+
+The first web slice records demonstrations in a browser and saves schema-v2 CSV
+datasets through a local API. From the repository root, start the API in one
+terminal and the frontend in another:
+
+```bash
+python -m pip install -e . -r web/api/requirements.txt
+python -m uvicorn web.api.app:app --reload
+```
+
+```bash
+cd web
+npm install
+npm run dev
+```
+
+Open <http://127.0.0.1:5173>. Local project metadata and CSV files are stored under
+`.local-data/`, which is ignored by Git. The API storage interface is intentionally
+small so this local filesystem adapter can be replaced by S3 for deployment. See
+the [web platform specification](docs/web-platform-spec.md) for the product scope
+and deployment design.
+
+Training jobs run asynchronously in one local worker thread and expose epoch
+progress in the project page. Completed policies can now run a seeded evaluation;
+the page reports success and failure metrics and replays saved episode trajectories.
+Evaluation is synchronous for this small local MVP. This worker and filesystem
+storage are for local development. The AWS pilot uses a private S3 bucket for
+metadata, datasets, and model artifacts; an SQS queue invokes a CPU Lambda worker
+for training; and CloudFront serves the static application and forwards API calls
+to a Lambda-backed HTTP API. Cognito sign-in is required for application API routes,
+and public registration is disabled; an administrator must create each allowed
+user. See the [web platform specification](docs/web-platform-spec.md) for its
+limits and deployment details.
+
+To prepare the frontend and review the infrastructure template, install the CDK
+dependencies and run synthesis:
+
+```bash
+npm --prefix infra/cdk ci
+npm --prefix web ci
+npm --prefix web run build
+npm --prefix infra/cdk run synth
+```
+
+Deployment also requires AWS credentials, a bootstrapped CDK environment, and a
+running Docker daemon because the API and training worker use a container image.
+After deployment, create an invited user in the Cognito console using the
+`CognitoUserPoolId` output; self-service registration is disabled.
+
+Pause the pilot with `npm --prefix infra/cdk run pause`, and resume it with
+`npm --prefix infra/cdk run resume`. Pausing removes application API routes and the
+SQS worker trigger while preserving project data and Cognito users. A training
+invocation already in progress may finish; queued runs wait for resume. CloudFront,
+Cognito, API bootstrap, SQS, and S3 remain provisioned, so pause prevents training
+compute but does not eliminate all AWS charges.
 
 ## Development
 

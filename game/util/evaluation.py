@@ -42,6 +42,7 @@ class EvaluationEpisode:
     scenario: Scenario
     outcome: EpisodeOutcome
     steps: int
+    trajectory: tuple[GameState, ...] = ()
 
 
 @dataclass(frozen=True)
@@ -113,6 +114,7 @@ def evaluate_policy(
     blue_size: int = 50,
     target_size: int = 70,
     play_area_top: int = HUD_HEIGHT,
+    capture_trajectory: bool = False,
 ) -> EvaluationResult:
     """Evaluate ``policy`` on a finite scenario set without opening a window."""
     config.validate()
@@ -132,6 +134,7 @@ def evaluate_policy(
     episode_results: list[EvaluationEpisode] = []
     for episode_id, scenario in enumerate(chosen, start=1):
         state = scenario.initial_state()
+        trajectory = [state] if capture_trajectory else []
         outcome = EpisodeOutcome.STALLED
         steps = 0
         if _inside_target(state, blue_size, target_size):
@@ -147,6 +150,8 @@ def evaluate_policy(
                     state.target_x,
                     state.target_y,
                 )
+                if capture_trajectory:
+                    trajectory.append(state)
                 if _inside_target(state, blue_size, target_size):
                     outcome = EpisodeOutcome.SUCCESS
                     break
@@ -159,7 +164,7 @@ def evaluate_policy(
                     outcome = EpisodeOutcome.OUT_OF_BOUNDS
                     break
         episode_results.append(
-            EvaluationEpisode(episode_id, scenario, outcome, steps)
+            EvaluationEpisode(episode_id, scenario, outcome, steps, tuple(trajectory))
         )
 
     successful_steps = [

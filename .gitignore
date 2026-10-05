@@ -203,6 +203,11 @@ poetry.toml
 # ruff
 .ruff_cache/
 
+### Behavior Lab web app ###
+web/node_modules/
+web/dist/
+.local-data/
+
 # LSP config files
 pyrightconfig.json
 
