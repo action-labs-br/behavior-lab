@@ -1,0 +1,21 @@
+{
+  "name": "behavior-lab-infrastructure",
+  "private": true,
+  "scripts": {
+    "synth": "cdk synth",
+    "diff": "cdk diff",
+    "deploy": "npm --prefix ../../web run build && cdk deploy",
+    "pause": "npm --prefix ../../web run build && cdk deploy --context serviceEnabled=false",
+    "resume": "npm --prefix ../../web run build && cdk deploy --context serviceEnabled=true"
+  },
+  "devDependencies": {
+    "@types/node": "26.6.4",
+    "aws-cdk": "2.1144.0",
+    "tsx": "4.23.15",
+    "typescript": "7.0.2"
+  },
+  "dependencies": {
+    "aws-cdk-lib": "^2.272.0",
+    "constructs": "^10.8.1"
+  }
+}
