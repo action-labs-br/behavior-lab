@@ -15,7 +15,7 @@ service = json.loads(Path('.deploy/ecs-created.json').read_text())
 values = {
     'AWS_PROFILE': state['profile'],
     'AWS_REGION': state['region'],
-    'REGISTRY': f\"{state['account']}.dkr.ecr.{state['region']}.amazonaws.com\",
+    'REGISTRY': f"{state['account']}.dkr.ecr.{state['region']}.amazonaws.com",
     'APP_NAME': state['name'],
     'SERVICE_ARN': service['service']['serviceArn'],
 }
