@@ -1,8 +1,0 @@
-{
-  "app": "npx tsx bin/behavior-lab.ts",
-  "context": {
-    "@aws-cdk/core:newStyleStackSynthesis": true,
-    "customDomainName": "behaviorlab.gusdesouza.com",
-    "customCertificateArn": "arn:aws:acm:us-east-1:437190076880:certificate/8819fbe8-c037-4a20-bba2-ecf821c9c374"
-  }
-}

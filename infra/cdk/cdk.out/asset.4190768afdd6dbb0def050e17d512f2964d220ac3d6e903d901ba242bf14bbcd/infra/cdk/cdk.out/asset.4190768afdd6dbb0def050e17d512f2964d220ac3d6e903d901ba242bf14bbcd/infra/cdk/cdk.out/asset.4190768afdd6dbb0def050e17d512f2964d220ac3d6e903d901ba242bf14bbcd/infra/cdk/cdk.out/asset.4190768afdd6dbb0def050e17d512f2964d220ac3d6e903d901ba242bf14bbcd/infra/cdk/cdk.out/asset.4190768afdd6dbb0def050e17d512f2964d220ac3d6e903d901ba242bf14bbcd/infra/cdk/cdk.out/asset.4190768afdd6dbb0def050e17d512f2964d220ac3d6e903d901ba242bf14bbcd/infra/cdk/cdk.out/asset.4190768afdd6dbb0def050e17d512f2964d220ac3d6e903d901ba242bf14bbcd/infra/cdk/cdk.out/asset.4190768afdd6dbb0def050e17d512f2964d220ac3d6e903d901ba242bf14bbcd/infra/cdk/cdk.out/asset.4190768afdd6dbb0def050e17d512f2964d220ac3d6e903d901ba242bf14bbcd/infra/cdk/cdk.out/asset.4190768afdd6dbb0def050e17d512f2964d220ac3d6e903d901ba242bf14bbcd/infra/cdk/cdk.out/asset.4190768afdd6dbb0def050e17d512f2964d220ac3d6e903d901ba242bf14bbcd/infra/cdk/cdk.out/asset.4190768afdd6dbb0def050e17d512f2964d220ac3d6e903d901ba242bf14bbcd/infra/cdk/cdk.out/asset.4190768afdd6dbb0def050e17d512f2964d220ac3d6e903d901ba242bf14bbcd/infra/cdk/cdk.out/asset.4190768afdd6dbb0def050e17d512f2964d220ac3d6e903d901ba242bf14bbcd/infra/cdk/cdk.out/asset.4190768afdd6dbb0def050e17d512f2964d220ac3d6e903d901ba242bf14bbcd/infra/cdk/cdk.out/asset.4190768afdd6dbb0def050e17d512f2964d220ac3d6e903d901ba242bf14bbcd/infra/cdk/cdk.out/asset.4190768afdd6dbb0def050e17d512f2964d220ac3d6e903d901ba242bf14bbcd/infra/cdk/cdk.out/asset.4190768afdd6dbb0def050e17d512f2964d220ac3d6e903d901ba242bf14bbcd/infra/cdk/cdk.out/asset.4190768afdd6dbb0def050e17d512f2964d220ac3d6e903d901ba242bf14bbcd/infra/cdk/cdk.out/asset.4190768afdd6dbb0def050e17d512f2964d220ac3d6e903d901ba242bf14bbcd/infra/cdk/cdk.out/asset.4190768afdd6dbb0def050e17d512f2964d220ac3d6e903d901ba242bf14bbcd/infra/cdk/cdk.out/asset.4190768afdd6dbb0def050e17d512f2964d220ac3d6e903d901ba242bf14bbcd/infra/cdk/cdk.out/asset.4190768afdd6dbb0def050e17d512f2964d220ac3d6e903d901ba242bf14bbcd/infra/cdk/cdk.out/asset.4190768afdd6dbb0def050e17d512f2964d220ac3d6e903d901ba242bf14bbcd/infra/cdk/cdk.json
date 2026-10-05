@@ -1,6 +1,0 @@
-{
-  "app": "npx tsx bin/behavior-lab.ts",
-  "context": {
-    "@aws-cdk/core:newStyleStackSynthesis": true
-  }
-}

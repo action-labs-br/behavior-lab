@@ -52,6 +52,8 @@ downloads/
 eggs/
 .eggs/
 lib/
+# CDK stack source lives in a lib/ directory
+!projects/behavior-cloning-game/infra/cdk/lib/
 lib64/
 parts/
 sdist/
@@ -218,3 +220,7 @@ projects/behavior-cloning-game/game/data/*
 pyrightconfig.json
 
 # End of https://www.toptal.com/developers/gitignore/api/python,macos
+
+# CDK generated output and dependencies
+cdk.out/
+node_modules/

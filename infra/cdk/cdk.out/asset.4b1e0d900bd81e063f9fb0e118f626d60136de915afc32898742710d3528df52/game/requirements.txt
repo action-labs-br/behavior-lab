@@ -1,5 +1,0 @@
-# Direct runtime dependencies only. pip resolves their platform-specific dependencies.
-numpy>=1.26
-pandas>=2.1
-pygame>=2.5
-torch>=2.2
