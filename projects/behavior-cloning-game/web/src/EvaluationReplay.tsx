@@ -53,8 +53,12 @@ export default function EvaluationReplay({ evaluation }: { evaluation: Evaluatio
       const episodeIndex = evaluation.episodes.findIndex((item) => item.episode_id === episodeId);
       const nextEpisode = evaluation.episodes[episodeIndex + 1];
       if (nextEpisode) {
-        setEpisodeId(nextEpisode.episode_id);
-        setIndex(0);
+        setPlaying(false);
+        window.setTimeout(() => {
+          setEpisodeId(nextEpisode.episode_id);
+          setIndex(0);
+          setPlaying(true);
+        }, 1000);
       } else setPlaying(false);
     }, 45);
     return () => window.clearInterval(timer);
@@ -77,13 +81,29 @@ export default function EvaluationReplay({ evaluation }: { evaluation: Evaluatio
     context.strokeStyle = '#c9d6e2'; context.lineWidth = 1;
     for (let x = 0; x < WORLD.width; x += 40) { context.beginPath(); context.moveTo(x, WORLD.hud); context.lineTo(x, WORLD.height); context.stroke(); }
     for (let y = WORLD.hud; y < WORLD.height; y += 40) { context.beginPath(); context.moveTo(0, y); context.lineTo(WORLD.width, y); context.stroke(); }
+    const visibleFrames = replayFrames.slice(0, index + 1);
+    if (visibleFrames.length > 1) {
+      context.beginPath();
+      context.moveTo(visibleFrames[0].blue_x + WORLD.player / 2, visibleFrames[0].blue_y + WORLD.player / 2);
+      for (const frame of visibleFrames.slice(1)) {
+        context.lineTo(frame.blue_x + WORLD.player / 2, frame.blue_y + WORLD.player / 2);
+      }
+      context.strokeStyle = '#2475e8'; context.globalAlpha = 0.55; context.lineWidth = 3;
+      context.lineCap = 'round'; context.lineJoin = 'round'; context.stroke();
+      context.globalAlpha = 1;
+    }
     context.fillStyle = '#fff'; context.fillRect(current.target_x, current.target_y, WORLD.target, WORLD.target);
     context.strokeStyle = '#233245'; context.lineWidth = 3; context.strokeRect(current.target_x + 1.5, current.target_y + 1.5, WORLD.target - 3, WORLD.target - 3);
     context.beginPath(); context.arc(current.blue_x + WORLD.player / 2, current.blue_y + WORLD.player / 2, WORLD.player / 2, 0, Math.PI * 2);
-    context.fillStyle = '#2475e8'; context.fill();
+    const outcome = episode?.outcome;
+    const showingResult = index === replayFrames.length - 1;
+    context.fillStyle = showingResult && outcome
+      ? outcome === 'success' ? '#2eaa68' : '#e34d4d'
+      : '#2475e8';
+    context.fill();
     context.fillStyle = '#344256'; context.font = '600 15px Inter, system-ui, sans-serif';
     context.fillText(`EPISODE ${episodeId}   ·   STEP ${index} / ${Math.max(0, replayFrames.length - 1)}`, 18, 26);
-  }, [current, episodeId, replayFrames.length, index]);
+  }, [current, episode, episodeId, replayFrames, index]);
 
   return <div className="replay-panel">
     <div className="replay-heading"><div><strong>Policy replay</strong><small>{episode ? `${episode.outcome.replaceAll('_', ' ')} · ${episode.steps} steps` : 'Loading episode…'}</small></div>

@@ -47,6 +47,7 @@ function App() {
   const sessionSeed = useRef(0);
   const randomState = useRef(0);
   const pausedRef = useRef(false);
+  const roundOutcome = useRef<Outcome | null>(null);
   const [projects, setProjects] = useState<Project[]>([]);
   const [project, setProject] = useState<Project | null>(null);
   const [datasets, setDatasets] = useState<Dataset[]>([]);
@@ -179,6 +180,7 @@ function App() {
   };
 
   const startEpisode = useCallback(() => {
+    roundOutcome.current = null;
     player.current = { x: (WORLD.width - WORLD.player) / 2, y: (WORLD.height - WORLD.player) / 2 };
     const random = () => {
       randomState.current ^= randomState.current << 13;
@@ -197,6 +199,8 @@ function App() {
   }, []);
 
   const finishEpisode = useCallback((outcome: Outcome) => {
+    if (roundOutcome.current) return;
+    roundOutcome.current = outcome;
     const completed = buffer.current.map((sample) => ({ ...sample, outcome }));
     buffer.current = [];
     if (completed.length) {
@@ -207,7 +211,7 @@ function App() {
       episode.current += 1;
     }
     setLastOutcome(outcome);
-    startEpisode();
+    window.setTimeout(startEpisode, 1000);
   }, [startEpisode]);
 
   const sessionRows = useRef<Sample[]>([]);
@@ -222,7 +226,7 @@ function App() {
       if (!element) return;
       const context = element.getContext('2d');
       if (!context) return;
-      if (!lastStepAt || timestamp - lastStepAt >= 1000 / 60) {
+      if (!roundOutcome.current && (!lastStepAt || timestamp - lastStepAt >= 1000 / 60)) {
         lastStepAt = timestamp;
         const actionX = (pressed.current.has('ArrowRight') ? WORLD.speed : 0) - (pressed.current.has('ArrowLeft') ? WORLD.speed : 0);
         const actionY = (pressed.current.has('ArrowDown') ? WORLD.speed : 0) - (pressed.current.has('ArrowUp') ? WORLD.speed : 0);
@@ -261,7 +265,8 @@ function App() {
       context.fillStyle = '#ffffff'; context.fillRect(target.current.x, target.current.y, WORLD.target, WORLD.target);
       context.strokeStyle = '#233245'; context.lineWidth = 3; context.strokeRect(target.current.x + 1.5, target.current.y + 1.5, WORLD.target - 3, WORLD.target - 3);
       context.beginPath(); context.arc(player.current.x + WORLD.player / 2, player.current.y + WORLD.player / 2, WORLD.player / 2, 0, Math.PI * 2);
-      context.fillStyle = '#2475e8'; context.fill();
+      context.fillStyle = roundOutcome.current === 'success' ? '#2eaa68'
+        : roundOutcome.current ? '#e34d4d' : '#2475e8'; context.fill();
       context.fillStyle = '#344256'; context.font = '600 15px Inter, system-ui, sans-serif';
       context.fillText(`EPISODE ${episode.current + 1}   ·   ${sessionRows.current.length.toLocaleString()} SAMPLES`, 18, 26);
       animation = window.requestAnimationFrame(draw);
