@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import {
   ArrowDown, ArrowLeft, ArrowRight, ArrowUp, Check, ChevronRight,
-  CircleHelp, Download, FolderKanban, Gamepad2, LoaderCircle, Pause,
+  BarChart3, CircleHelp, Download, FolderKanban, Gamepad2, LoaderCircle, Pause,
   LogOut, Play, Plus, RotateCcw, Sparkles, Target, Trophy, X,
 } from 'lucide-react';
 import EvaluationReplay from './EvaluationReplay';
@@ -15,9 +15,13 @@ type Dataset = {
   id: string; name: string; row_count: number; episode_count: number;
   outcomes: Record<string, number>; no_op_ratio: number; created_at: string;
 };
+type DatasetMetrics = {
+  samples: number; episodes: number; no_op_ratio: number;
+  outcomes: Record<string, number>; action_histogram: { action: string; count: number }[];
+};
 type TrainingRun = {
   id: string; dataset_id: string; status: 'queued' | 'running' | 'cancel_requested' | 'completed' | 'failed' | 'cancelled';
-  preset: string; config: { epochs: number; feature_transform: string; seed: number };
+  preset: string; config: { epochs: number; feature_transform: string; seed: number; drop_noop?: boolean };
   progress: { epoch: number; epochs_total: number; train_loss: number[]; validation_loss: number[] };
   error_message?: string; created_at: string;
   metrics?: { best_epoch: number; final_validation_loss: number | null } | null;
@@ -51,14 +55,18 @@ function App() {
   const [projects, setProjects] = useState<Project[]>([]);
   const [project, setProject] = useState<Project | null>(null);
   const [datasets, setDatasets] = useState<Dataset[]>([]);
+  const [metricsDataset, setMetricsDataset] = useState<Dataset | null>(null);
+  const [datasetMetrics, setDatasetMetrics] = useState<DatasetMetrics | null>(null);
+  const [metricsLoading, setMetricsLoading] = useState(false);
+  const [metricsError, setMetricsError] = useState('');
   const [runs, setRuns] = useState<TrainingRun[]>([]);
   const [evaluations, setEvaluations] = useState<Evaluation[]>([]);
   const [evaluatingRun, setEvaluatingRun] = useState<string | null>(null);
   const [selectedEvaluation, setSelectedEvaluation] = useState<string | null>(null);
-  const [evaluationEpisodes, setEvaluationEpisodes] = useState(20);
-  const [evaluationSeed, setEvaluationSeed] = useState(42);
+  const [evaluationSettings, setEvaluationSettings] = useState<Record<string, { episodes: number; seed: number }>>({});
   const [trainingPreset, setTrainingPreset] = useState('quick');
   const [featureTransform, setFeatureTransform] = useState('absolute');
+  const [dropNoop, setDropNoop] = useState(false);
   const [startingRun, setStartingRun] = useState<string | null>(null);
   const [name, setName] = useState('My first project');
   const [collecting, setCollecting] = useState(false);
@@ -72,6 +80,7 @@ function App() {
   const [authStatus, setAuthStatus] = useState<'loading' | 'local' | 'signed-out' | 'signed-in' | 'error'>('loading');
   const [authMessage, setAuthMessage] = useState('');
   const [username, setUsername] = useState<string | null>(null);
+  const [activeSection, setActiveSection] = useState('play-the-game');
 
   useEffect(() => {
     let active = true;
@@ -329,17 +338,34 @@ function App() {
     URL.revokeObjectURL(url);
   };
 
+  const showDatasetMetrics = async (dataset: Dataset) => {
+    setMetricsDataset(dataset);
+    setDatasetMetrics(null);
+    setMetricsError('');
+    setMetricsLoading(true);
+    try {
+      const response = await apiFetch(`${API}/api/v1/datasets/${dataset.id}/metrics`);
+      const result = await response.json();
+      if (!response.ok) throw new Error(result.detail ?? 'Could not load dataset metrics.');
+      setDatasetMetrics(result);
+    } catch (error) {
+      setMetricsError(error instanceof Error ? error.message : 'Could not load dataset metrics.');
+    } finally {
+      setMetricsLoading(false);
+    }
+  };
+
   const trainDataset = async (dataset: Dataset) => {
     setStartingRun(dataset.id);
     try {
       const response = await apiFetch(`${API}/api/v1/datasets/${dataset.id}/training-runs`, {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ preset: trainingPreset, feature_transform: featureTransform, seed: 42 }),
+        body: JSON.stringify({ preset: trainingPreset, feature_transform: featureTransform, seed: 42, drop_noop: dropNoop }),
       });
       const result = await response.json();
       if (!response.ok) throw new Error(result.detail ?? 'Could not start training.');
       setRuns((current) => [result, ...current.filter((run) => run.id !== result.id)]);
-      setNotice(`Training run queued with the ${trainingPreset} preset.`);
+      setNotice(`Training run queued with the ${trainingPreset} preset${dropNoop ? ', dropping no-op actions' : ''}.`);
     } catch (error) {
       const detail = error instanceof Error ? error.message : 'Could not start training.';
       setNotice(Array.isArray(detail) ? detail.join(', ') : detail);
@@ -355,11 +381,12 @@ function App() {
   };
 
   const evaluateRun = async (run: TrainingRun) => {
+    const settings = evaluationSettings[run.id] ?? { episodes: 20, seed: 42 };
     setEvaluatingRun(run.id);
     try {
       const response = await apiFetch(`${API}/api/v1/training-runs/${run.id}/evaluations`, {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ episodes: evaluationEpisodes, max_steps: 500, seed: evaluationSeed }),
+        body: JSON.stringify({ episodes: settings.episodes, max_steps: 500, seed: settings.seed }),
       });
       const result = await response.json();
       if (!response.ok) throw new Error(result.detail ?? 'Could not evaluate policy.');
@@ -384,13 +411,25 @@ function App() {
     const progress = run.progress ?? { epoch: 0, epochs_total: run.config.epochs, train_loss: [], validation_loss: [] };
     const ratio = progress.epochs_total ? Math.min(100, progress.epoch / progress.epochs_total * 100) : 0;
     const latestLoss = progress.validation_loss.at(-1);
+    const evaluation = evaluationSettings[run.id] ?? { episodes: 20, seed: 42 };
+    const updateEvaluation = (key: 'episodes' | 'seed', value: number) => {
+      setEvaluationSettings((current) => ({
+        ...current,
+        [run.id]: { ...(current[run.id] ?? { episodes: 20, seed: 42 }), [key]: value },
+      }));
+    };
     return <article className="run-card" key={run.id}>
-      <div className="run-topline"><div className="run-icon"><Sparkles size={16} /></div><div className="run-name"><strong>{run.preset} policy</strong><small>{run.config.feature_transform.replaceAll('-', ' ')} · {new Date(run.created_at).toLocaleString()}</small></div><span className={`run-status ${run.status}`}>{run.status.replace('_', ' ')}</span>{['queued', 'running'].includes(run.status) && <button className="run-cancel" onClick={() => void cancelRun(run)}>Cancel</button>}</div>
+      <div className="run-topline"><div className="run-icon"><Sparkles size={16} /></div><div className="run-name"><strong>{run.preset} policy</strong><small>{run.config.feature_transform.replaceAll('-', ' ')}{run.config.drop_noop ? ' · no-op dropped' : ''} · {new Date(run.created_at).toLocaleString()}</small></div><span className={`run-status ${run.status}`}>{run.status.replace('_', ' ')}</span>{['queued', 'running'].includes(run.status) && <button className="run-cancel" onClick={() => void cancelRun(run)}>Cancel</button>}</div>
       {['queued', 'running', 'cancel_requested'].includes(run.status) && <><div className="progress-track"><span style={{ width: `${ratio}%` }} /></div><div className="progress-label"><span>{run.status === 'queued' ? 'Waiting for the worker' : `Epoch ${progress.epoch} of ${progress.epochs_total}`}</span><span>{latestLoss === undefined ? 'Preparing data…' : `Validation loss ${latestLoss.toFixed(4)}`}</span></div></>}
-      {run.status === 'completed' && <div className="run-result"><span><Check size={14} /> Best epoch {run.metrics?.best_epoch ?? '—'}</span><span>Validation loss {run.metrics?.final_validation_loss?.toFixed(4) ?? '—'}</span><button className="button train-button evaluate-button" disabled={evaluatingRun !== null} onClick={() => void evaluateRun(run)}>{evaluatingRun === run.id ? <LoaderCircle className="spin" size={14} /> : <Target size={14} />}{evaluatingRun === run.id ? 'Evaluating…' : 'Evaluate policy'}</button></div>}
+      {run.status === 'completed' && <div className="run-result"><span><Check size={14} /> Best epoch {run.metrics?.best_epoch ?? '—'}</span><span>Validation loss {run.metrics?.final_validation_loss?.toFixed(4) ?? '—'}</span><div className="eval-inline-options"><label>EPISODES<input type="number" min={1} max={50} value={evaluation.episodes} onChange={(event) => updateEvaluation('episodes', Math.min(50, Math.max(1, Number(event.target.value))))} /></label><label>SEED<input type="number" min={0} max={2147483647} value={evaluation.seed} onChange={(event) => updateEvaluation('seed', Math.min(2147483647, Math.max(0, Number(event.target.value))))} /></label></div><button className="button train-button evaluate-button" disabled={evaluatingRun !== null} onClick={() => void evaluateRun(run)}>{evaluatingRun === run.id ? <LoaderCircle className="spin" size={14} /> : <Target size={14} />}{evaluatingRun === run.id ? 'Evaluating…' : 'Evaluate policy'}</button></div>}
       {run.status === 'failed' && <div className="run-error">{run.error_message ?? 'Training failed. Try again with another preset.'}</div>}
       {run.status === 'cancelled' && <div className="run-result">This run was cancelled.</div>}
     </article>;
+  };
+
+  const navigateTo = (sectionId: string) => {
+    setActiveSection(sectionId);
+    document.getElementById(sectionId)?.scrollIntoView({ behavior: 'smooth', block: 'start' });
   };
 
   if (authStatus === 'loading') return (
@@ -432,13 +471,13 @@ function App() {
   return (
     <main className="workspace">
       <header className="topbar"><a className="brand" href="#" onClick={(e) => { e.preventDefault(); setProject(null); void loadProjects(); }}><span className="brand-mark"><Sparkles size={17} /></span> behavior<span>lab</span></a><div className="workspace-title"><span>PROJECT</span><strong>{project.name}</strong></div><div className="auth-actions"><span className="top-note"><span className="status-dot" />{authConfig?.authentication_enabled ? ` Signed in${username ? ` as ${username}` : ''}` : ' Local workspace'}</span>{authConfig?.authentication_enabled && <button className="signout-button" onClick={() => void stopSignIn()}><LogOut size={14} /> Sign out</button>}</div></header>
-      <div className="workspace-body"><aside className="sidebar"><div className="side-label">LEARNING LAB</div><div className="side-item active"><Gamepad2 size={17} /> Play & collect</div><div className="side-item muted"><FolderKanban size={17} /> Datasets <b>{datasets.length}</b></div><div className="side-item muted"><Target size={17} /> Training runs <b>{runs.length}</b></div><div className="sidebar-bottom"><CircleHelp size={16} /><span>Every move becomes<br />a training example.</span></div></aside>
-        <section className="main-panel"><div className="page-heading"><div><div className="eyebrow"><span className="eyebrow-line" /> PLAY & COLLECT</div><h1>Play the game.</h1><p>Move the blue circle fully inside the target. Your completed attempts become examples for the model.</p></div></div>
+      <div className="workspace-body"><aside className="sidebar"><div className="side-label">LEARNING LAB</div><nav aria-label="Project sections"><button aria-current={activeSection === 'play-the-game' ? 'location' : undefined} className={`side-item ${activeSection === 'play-the-game' ? 'active' : 'muted'}`} onClick={() => navigateTo('play-the-game')}><Gamepad2 size={17} /> Play & collect</button><button aria-current={activeSection === 'demonstration-datasets' ? 'location' : undefined} className={`side-item ${activeSection === 'demonstration-datasets' ? 'active' : 'muted'}`} onClick={() => navigateTo('demonstration-datasets')}><FolderKanban size={17} /> Demonstration Datasets <b>{datasets.length}</b></button><button aria-current={activeSection === 'policy-evaluations' ? 'location' : undefined} className={`side-item ${activeSection === 'policy-evaluations' ? 'active' : 'muted'}`} onClick={() => navigateTo('policy-evaluations')}><Target size={17} /> Policy Evaluations <b>{evaluations.length}</b></button></nav><div className="sidebar-bottom"><CircleHelp size={16} /><span>Every move becomes<br />a training example.</span></div></aside>
+        <section className="main-panel"><div className="page-heading" id="play-the-game"><div><div className="eyebrow"><span className="eyebrow-line" /> PLAY & COLLECT</div><h1>Play the game.</h1><p>Move the blue circle fully inside the target. Your completed attempts become examples for the model.</p></div></div>
           <div className="game-layout"><div className="game-column"><div className="game-frame"><div className="canvas-top"><span className="live-label"><span className={collecting ? 'live-dot active' : 'live-dot'} />{collecting ? (paused ? 'PAUSED' : 'RECORDING') : 'READY'}</span><span>800 × 600 PLAYFIELD</span><button className="icon-button" title="Keyboard controls: arrow keys move; space pauses" aria-label="Keyboard controls: arrow keys move; space pauses"><CircleHelp size={16} /></button></div><canvas ref={canvas} className={collecting ? 'game-canvas' : 'game-canvas idle'} width={800} height={600} aria-label="Game playfield" />{!collecting && <div className="game-overlay"><div className="overlay-icon"><Gamepad2 size={24} /></div><strong>Ready when you are</strong><span>Start a collection session and teach by playing.</span><button className="button primary" onClick={beginCollection}><Play size={15} fill="currentColor" /> Start collecting</button></div>}{collecting && paused && <div className="pause-overlay"><Pause size={21} /><strong>Paused</strong><span>Press space or resume when you’re ready.</span><button className="button primary" onClick={() => { pausedRef.current = false; setPaused(false); }}><Play size={15} fill="currentColor" /> Resume</button></div>}</div>
             <div className="game-controls"><div className="key-help"><span>MOVE</span><kbd><ArrowUp size={11} /></kbd><div><kbd><ArrowLeft size={11} /></kbd><kbd><ArrowDown size={11} /></kbd><kbd><ArrowRight size={11} /></kbd></div><span className="space-key"><kbd>SPACE</kbd> pause</span></div><div className="control-actions">{collecting ? <><button className="button secondary" onClick={() => { startEpisode(); setNotice('Current attempt discarded. A fresh attempt is ready.'); }}><RotateCcw size={15} /> Restart attempt</button><button className="button dark" onClick={endCollection} disabled={saving}>{saving ? <LoaderCircle className="spin" size={15} /> : <Check size={15} />} Save collection</button></> : <button className="button secondary" onClick={beginCollection}><Play size={15} /> New session</button>}</div></div>
           </div><aside className="stats-column"><div className="stat-card primary-stat"><div className="stat-icon blue"><Gamepad2 size={17} /></div><div className="stat-label">COMPLETED EPISODES</div><div className="stat-value">{episodeCount.toString().padStart(2, '0')}</div><div className="stat-foot">{episodeCount < 2 ? `${2 - episodeCount} more needed to train` : 'Ready to train'}</div></div><div className="stat-card"><div className="stat-icon lilac"><Target size={17} /></div><div className="stat-label">RECORDED SAMPLES</div><div className="stat-value">{samplesCount.toLocaleString()}</div><div className="stat-foot">state and action pairs</div></div><div className="outcome-card"><div className="stat-label">LAST ATTEMPT</div>{lastOutcome ? <div className={`outcome-value ${lastOutcome}`}><span />{lastOutcome.replace('_', ' ')}</div> : <div className="outcome-empty">Complete an attempt to see its outcome</div>}</div><div className="tip-card"><div className="tip-title"><Trophy size={15} /> QUICK TIP</div><p>Collect a couple of varied attempts. The model can only imitate patterns it has seen.</p></div></aside></div>
           {notice && <div className="notice workspace-notice" role="status">{notice}<button aria-label="Dismiss message" onClick={() => setNotice('')}><X size={15} /></button></div>}
-          <section className="datasets-section">
+          <section className="datasets-section" id="demonstration-datasets">
             <div className="datasets-heading">
               <div><div className="section-kicker">YOUR WORK</div><h2>Demonstration datasets</h2></div>
               <span>{datasets.length} DATASET{datasets.length === 1 ? '' : 'S'}</span>
@@ -450,6 +489,7 @@ function App() {
                 <div className="dataset-metric"><strong>{dataset.episode_count}</strong><small>episodes</small></div>
                 <div className="dataset-metric"><strong>{dataset.row_count.toLocaleString()}</strong><small>samples</small></div>
                 <div className="dataset-metric"><strong>{Math.round((dataset.outcomes.success ?? 0) / Math.max(1, dataset.episode_count) * 100)}%</strong><small>success</small></div>
+                <button className="icon-button" title={`View ${dataset.name} metrics`} aria-label={`View ${dataset.name} metrics`} onClick={() => void showDatasetMetrics(dataset)}><BarChart3 size={16} /></button>
                 <button className="icon-button download" aria-label={`Download ${dataset.name} CSV`} onClick={() => void downloadCsv(dataset)}><Download size={16} /></button>
               </div>
               <details className="dataset-teach">
@@ -457,7 +497,7 @@ function App() {
                 <div className="dataset-teach-content">
                   <label>TRAINING PRESET<select value={trainingPreset} onChange={(event) => setTrainingPreset(event.target.value)}><option value="quick">Quick · 10 epochs</option><option value="balanced">Balanced · 30 epochs</option><option value="explore">Explore · 50 epochs</option></select></label>
                   <label>STATE FEATURES<select value={featureTransform} onChange={(event) => setFeatureTransform(event.target.value)}><option value="absolute">Absolute position</option><option value="relative-center">Relative to center</option><option value="relative-containment">Relative containment</option></select></label>
-                  <span className="training-explainer">Training runs in the background. You can keep collecting while the model learns.</span>
+                  <label className="drop-noop-option"><input type="checkbox" checked={dropNoop} onChange={(event) => setDropNoop(event.target.checked)} /><span>Drop no-op actions from training</span></label>
                   <button className="button train-button" disabled={dataset.episode_count < 2 || startingRun !== null} onClick={() => void trainDataset(dataset)}>
                     {startingRun === dataset.id ? <LoaderCircle className="spin" size={14} /> : <Sparkles size={14} />}
                     {dataset.episode_count < 2 ? 'Need 2 episodes' : startingRun === dataset.id ? 'Starting…' : 'Train policy'}
@@ -467,17 +507,30 @@ function App() {
               </details>
             </div>)}</div> : <div className="empty-datasets"><div className="empty-icon"><Plus size={17} /></div><span>Your saved datasets will show up here.</span><span className="muted-text">Complete and save a collection to get started.</span></div>}
           </section>
-          {(runs.some((run) => run.status === 'completed') || evaluations.length > 0) && <section className="evaluation-section">
+          <section className="evaluation-section" id="policy-evaluations">
             <div className="training-heading"><div><div className="section-kicker">POLICY EVALUATIONS</div><h2>See what it learned</h2></div><span>SEEDED · REPRODUCIBLE</span></div>
-            <div className="evaluation-options"><label>EVALUATION EPISODES<input type="number" min={1} max={50} value={evaluationEpisodes} onChange={(event) => setEvaluationEpisodes(Math.min(50, Math.max(1, Number(event.target.value))))} /></label><label>SCENARIO SEED<input type="number" min={0} max={2147483647} value={evaluationSeed} onChange={(event) => setEvaluationSeed(Math.min(2147483647, Math.max(0, Number(event.target.value))))} /></label><span>Each run uses the same generated scenarios for the same seed.</span></div>
             {evaluations.length > 0 && <div className="evaluation-list">{evaluations.map((evaluation) => <article className="evaluation-card" key={evaluation.id}>
               <div className="evaluation-summary"><div className="run-icon"><Target size={16} /></div><div className="run-name"><strong>{Math.round(evaluation.metrics.success_rate * 100)}% success</strong><small>{evaluation.config.episodes} episodes · seed {evaluation.config.seed} · {new Date(evaluation.created_at).toLocaleString()}</small></div><span className="run-status completed">{evaluation.metrics.successes}/{evaluation.metrics.episodes} passed</span><button className="button train-button" onClick={() => setSelectedEvaluation((current) => current === evaluation.id ? null : evaluation.id)}>{selectedEvaluation === evaluation.id ? 'Hide replay' : 'View replay'}</button><button className="icon-button download" title="Download evaluation JSON" aria-label="Download evaluation JSON" onClick={() => void downloadEvaluation(evaluation)}><Download size={16} /></button></div>
               <div className="evaluation-metrics"><span>Mean successful steps <b>{evaluation.metrics.mean_successful_steps?.toFixed(1) ?? '—'}</b></span><span>Median <b>{evaluation.metrics.median_successful_steps?.toFixed(1) ?? '—'}</b></span><span>Stalled <b>{evaluation.metrics.stalled}</b></span><span>Out of bounds <b>{evaluation.metrics.out_of_bounds}</b></span></div>
               {selectedEvaluation === evaluation.id && <EvaluationReplay evaluation={evaluation} />}
             </article>)}</div>}
             {!evaluations.length && <div className="empty-datasets evaluation-empty">Evaluate a completed policy to see how reliably it reaches the target.</div>}
-          </section>}
+          </section>
         </section></div>
+      {metricsDataset && <div className="dataset-metrics-backdrop" onClick={() => setMetricsDataset(null)}>
+        <section className="dataset-metrics-modal" role="dialog" aria-modal="true" aria-labelledby="dataset-metrics-title" onClick={(event) => event.stopPropagation()}>
+          <div className="dataset-metrics-heading"><div><div className="section-kicker">DATASET ANALYSIS</div><h2 id="dataset-metrics-title">{metricsDataset.name}</h2></div><button className="icon-button" aria-label="Close dataset metrics" onClick={() => setMetricsDataset(null)}><X size={18} /></button></div>
+          {metricsLoading && <div className="dataset-metrics-message"><LoaderCircle className="spin" size={18} /> Loading dataset metrics…</div>}
+          {metricsError && <div className="run-error">{metricsError}</div>}
+          {datasetMetrics && <>
+            <div className="dataset-metrics-summary"><div><small>Samples</small><strong>{datasetMetrics.samples.toLocaleString()}</strong></div><div><small>Episodes</small><strong>{datasetMetrics.episodes.toLocaleString()}</strong></div><div><small>No-op actions</small><strong>{(datasetMetrics.no_op_ratio * 100).toFixed(1)}%</strong></div></div>
+            <div className="dataset-metrics-panels">
+              <section><h3>Episode outcomes</h3>{Object.entries(datasetMetrics.outcomes).map(([outcome, count]) => <div className="dataset-outcome-row" key={outcome}><span><i className={`outcome-dot ${outcome}`} />{outcome.replaceAll('_', ' ')}</span><strong>{count}</strong></div>)}</section>
+              <section><h3>Action distribution</h3>{datasetMetrics.action_histogram.slice(0, 5).map((item) => <div className="dataset-action-row" key={item.action}><span>{item.action}</span><div><i style={{ width: `${item.count / Math.max(1, datasetMetrics.action_histogram[0]?.count ?? 1) * 100}%` }} /></div><strong>{item.count}</strong></div>)}</section>
+            </div>
+          </>}
+        </section>
+      </div>}
     </main>
   );
 }
