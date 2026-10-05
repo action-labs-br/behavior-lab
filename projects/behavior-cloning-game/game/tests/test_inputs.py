@@ -46,7 +46,10 @@ class FromModelTests(unittest.TestCase):
             Coordinate(0, 0),
         )
 
-        self.assertEqual(next(model_input.model.parameters()).device, accel_device())
+        self.assertEqual(
+            next(model_input.model.parameters()).device.type,
+            accel_device().type,
+        )
         self.assertFalse(hasattr(model_input.model, "fc3"))
 
     def test_infers_configurable_hidden_size_from_checkpoint(self):
