@@ -1,6 +1,19 @@
 .train-button{padding:7px 9px;font-size:10px;color:#3776cc;background:#eef5ff;border:1px solid #dbe9fc}
 .train-button:hover{background:#e1efff}
 .train-button:disabled{color:#9ba6b3;background:#f7f8fa;border-color:#edf0f3;cursor:not-allowed;transform:none}
+.dataset-item+.dataset-item{border-top:1px solid #edf0f3}
+.dataset-row{border-bottom:0}
+.dataset-teach{border-top:1px solid #f0f2f5;padding:0 14px}
+.dataset-teach summary{width:max-content;display:flex;align-items:center;gap:7px;padding:9px 0;color:#3976c6;font-size:10px;font-weight:700;cursor:pointer;list-style:none}
+.dataset-teach summary::-webkit-details-marker{display:none}
+.dataset-teach summary::after{content:'+';font-size:14px;color:#8392a5}
+.dataset-teach[open] summary::after{content:'−'}
+.dataset-teach-content{display:grid;grid-template-columns:180px 210px minmax(150px,1fr) auto;gap:12px;align-items:end;padding:2px 0 13px}
+.dataset-teach-content label{display:flex;flex-direction:column;gap:7px;color:#8996a5;font:9px 'DM Mono',monospace;letter-spacing:.5px}
+.dataset-teach-content select{height:35px;padding:0 9px;background:#fff;border:1px solid #e0e6ed;border-radius:6px;color:#4a5a6f;font:11px 'DM Sans',sans-serif}
+.dataset-teach-content .training-explainer{padding:0 4px 4px}
+.dataset-runs-heading{margin-top:3px;color:#8996a5;font:9px 'DM Mono',monospace;letter-spacing:.5px;text-transform:uppercase}
+.dataset-runs{margin:8px 0 13px}
 .training-section{margin-top:32px}
 .training-heading{display:flex;align-items:flex-end;justify-content:space-between;margin-bottom:12px}
 .training-heading h2{font:700 16px Manrope,sans-serif;letter-spacing:-.4px;margin:7px 0 0;color:#29384c}
@@ -48,6 +61,7 @@
 .evaluation-empty{margin-top:10px}
 @media(max-width:700px){
   .training-options{grid-template-columns:1fr 1fr}.training-explainer{grid-column:span 2;padding:2px 0 0}
+  .dataset-teach-content{grid-template-columns:1fr 1fr}.dataset-teach-content .training-explainer{grid-column:span 2}.dataset-teach-content .button{grid-column:span 2;justify-self:start}
   .run-topline{gap:7px}.run-status{font-size:8px}.dataset-row{flex-wrap:wrap}.dataset-name{flex:1}
   .evaluation-options{align-items:stretch;flex-wrap:wrap}.evaluation-options label{flex:1}.evaluation-options>span{width:100%;padding:0}
   .evaluation-summary{flex-wrap:wrap}.evaluation-summary .run-name{min-width:40%}.evaluation-metrics{margin-left:0;gap:10px}.replay-controls{flex-wrap:wrap}.replay-controls input{min-width:100%}
