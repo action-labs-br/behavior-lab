@@ -7,7 +7,7 @@ web/node_modules
 web/dist
 web/.local-data
 .local-data
-origami_bc
+origami
 docs
 **/__pycache__
 **/*.pyc

@@ -7,7 +7,7 @@ Run from the application folder. Wait until any training job has finished before
 Use a new tag for every build; the ECR repository uses immutable tags. Stop if tests, build, or push fail.
 
 ```bash
-cd /path/to/origami_bc
+cd /path/to/origami
 export AWS_PROFILE=$(python3 -c 'import json; print(json.load(open(".deploy/deployment.json"))["profile"])')
 export AWS_REGION=$(python3 -c 'import json; print(json.load(open(".deploy/deployment.json"))["region"])')
 export REGISTRY=$(python3 -c 'import json; s=json.load(open(".deploy/deployment.json")); print(s["account"]+".dkr.ecr."+s["region"]+".amazonaws.com")')

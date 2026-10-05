@@ -1,8 +1,32 @@
 # ML Sandbox
 
-Small, readable machine-learning experiments. The active project is a behavior-cloning
-game: record a person moving a blue circle into a target, train a PyTorch policy on
-those demonstrations, and evaluate how well the policy imitates them.
+This repository contains two independent machine-learning projects. Each has its own
+frontend, runtime, dependencies, and documentation.
+
+| Project | What it does | Frontend | Start here |
+| --- | --- | --- | --- |
+| [Behavior Cloning Game](#behavior-cloning-game) | Learns to imitate a person moving a circle into a target. | Pygame desktop app and browser learning lab | [Five-minute quick start](docs/quickstart.md) |
+| [Origami](origami/README.md) | Collects paper-airplane folding examples and predicts the next fold. | FastAPI web app | [Origami README](origami/README.md) |
+
+## Repository map
+
+```text
+behavior_cloning_game/  Behavior Cloning Game launcher and CLI
+game/                   Pygame implementation, training code, and data
+web/                    Browser learning lab and API
+infra/cdk/              AWS infrastructure for the browser learning lab
+docs/                   Behavior Cloning Game guides and web platform spec
+tests/                  Behavior Cloning Game package tests
+origami/                Origami web app, model workflow, and AWS runbooks
+```
+
+The projects use separate Python environments and dependency manifests. Run commands
+from the relevant project directory unless a command below says otherwise.
+
+## Behavior Cloning Game
+
+Record a person moving a blue circle into a target, train a PyTorch policy on those
+demonstrations, and evaluate how well the policy imitates them.
 
 ## Quick start
 
