@@ -9,7 +9,9 @@ type Evaluation = {
 };
 type Frame = { blue_x: number; blue_y: number; target_x: number; target_y: number };
 
-export default function EvaluationReplay({ evaluation }: { evaluation: Evaluation }) {
+type ApiFetch = (input: RequestInfo | URL, init?: RequestInit) => Promise<Response>;
+
+export default function EvaluationReplay({ evaluation, apiFetch }: { evaluation: Evaluation; apiFetch: ApiFetch }) {
   const canvas = useRef<HTMLCanvasElement>(null);
   const [episodeId, setEpisodeId] = useState(1);
   const [frames, setFrames] = useState<Frame[]>([]);
@@ -32,7 +34,7 @@ export default function EvaluationReplay({ evaluation }: { evaluation: Evaluatio
   useEffect(() => {
     let cancelled = false;
     setFrames([]); setIndex(0); setPlaying(true); setError('');
-    fetch(`${API}/api/v1/evaluations/${evaluation.id}/replay?episode_id=${episodeId}`)
+    apiFetch(`${API}/api/v1/evaluations/${evaluation.id}/replay?episode_id=${episodeId}`)
       .then(async (response) => {
         const payload = await response.json();
         if (!response.ok) throw new Error(payload.detail ?? 'Could not load replay.');
@@ -41,7 +43,7 @@ export default function EvaluationReplay({ evaluation }: { evaluation: Evaluatio
       .then((result) => { if (!cancelled) setFrames(result); })
       .catch((reason: unknown) => { if (!cancelled) setError(reason instanceof Error ? reason.message : 'Could not load replay.'); });
     return () => { cancelled = true; };
-  }, [evaluation.id, episodeId]);
+  }, [apiFetch, evaluation.id, episodeId]);
 
   useEffect(() => {
     if (!playing || replayFrames.length === 0) return;

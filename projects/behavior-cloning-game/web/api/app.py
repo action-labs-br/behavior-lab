@@ -85,8 +85,22 @@ class LocalObjectStore:
         return records
 
     def _path(self, key: str) -> Path:
-        candidate = (self.root / key).resolve()
-        if not candidate.is_relative_to(self.root.resolve()):
+        # Object keys are internal paths, but some segments include identifiers
+        # supplied through API routes. Reject separators and traversal segments
+        # before constructing a filesystem path.
+        if not isinstance(key, str) or not key or "\\" in key or key.startswith("/"):
+            raise ValueError("Invalid object key")
+        segments = key.split("/")
+        if any(
+            segment in {"", ".", ".."}
+            or re.fullmatch(r"[A-Za-z0-9_.-]+", segment) is None
+            for segment in segments
+        ):
+            raise ValueError("Invalid object key")
+
+        root = self.root.resolve()
+        candidate = (root / Path(*segments)).resolve()
+        if not candidate.is_relative_to(root):
             raise ValueError("Invalid object key")
         return candidate
 
