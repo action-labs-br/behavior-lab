@@ -207,6 +207,8 @@ poetry.toml
 web/node_modules/
 web/dist/
 .local-data/
+infra/cdk/cdk.out/
+infra/cdk/.cdk.staging/
 
 # LSP config files
 pyrightconfig.json
