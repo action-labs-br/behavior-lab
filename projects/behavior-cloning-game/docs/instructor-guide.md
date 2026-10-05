@@ -25,7 +25,7 @@ Before class:
 
 1. Test the setup on the classroom operating systems and network.
 2. Preinstall dependencies if PyTorch downloads would consume class time.
-3. Run `cd game && venv/bin/python -m unittest discover -s tests -v` on macOS/Linux, or use `venv\Scripts\python` on Windows.
+3. From `projects/behavior-cloning-game/`, run `cd game && venv/bin/python -m unittest discover -s tests -v` on macOS/Linux, or use `venv\Scripts\python` on Windows.
 4. Keep a known-working CSV and checkpoint as recovery fixtures.
 5. Decide where learners will store generated CSV, `.pth`, and `.json` files; these can be large and should not normally be committed.
 

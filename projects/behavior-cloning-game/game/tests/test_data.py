@@ -53,7 +53,12 @@ class DatasetTests(unittest.TestCase):
             self.assertFalse(path.exists())
 
     def test_current_repository_dataset_loads_as_legacy(self):
-        path = Path(__file__).parents[1] / "data" / "demonstrations_20241218_161040.csv"
+        path = (
+            Path(__file__).parents[1]
+            / "data"
+            / "fixtures"
+            / "demonstrations_20241218_161040.csv"
+        )
         rows, legacy = load_demonstrations(path)
         self.assertTrue(legacy)
         self.assertGreater(len(rows), 0)

@@ -4,7 +4,7 @@ Move the blue circle fully inside the white, black-bordered target without touch
 
 ## Learning workflow
 
-From the repository root, create and activate a virtual environment, then install the package:
+From the Behavior Cloning Game project root, create and activate a virtual environment, then install the package:
 
 ```bash
 python3 -m venv venv

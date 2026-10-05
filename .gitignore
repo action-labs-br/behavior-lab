@@ -59,6 +59,7 @@ var/
 wheels/
 share/python-wheels/
 *.egg-info/
+*.tsbuildinfo
 .installed.cfg
 *.egg
 MANIFEST
@@ -204,11 +205,14 @@ poetry.toml
 .ruff_cache/
 
 ### Behavior Lab web app ###
-web/node_modules/
-web/dist/
+projects/behavior-cloning-game/web/node_modules/
+projects/behavior-cloning-game/web/dist/
 .local-data/
-infra/cdk/cdk.out/
-infra/cdk/.cdk.staging/
+projects/behavior-cloning-game/infra/cdk/cdk.out/
+projects/behavior-cloning-game/infra/cdk/.cdk.staging/
+projects/behavior-cloning-game/game/data/*
+!projects/behavior-cloning-game/game/data/fixtures/
+!projects/behavior-cloning-game/game/data/fixtures/**
 
 # LSP config files
 pyrightconfig.json

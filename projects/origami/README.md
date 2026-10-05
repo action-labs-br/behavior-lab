@@ -4,7 +4,7 @@ A small FastAPI app for collecting photos **before** paper-airplane folds, train
 
 ## Run locally
 
-Run all commands from this `origami/` directory. Python 3.11+ is required.
+Run all commands from `projects/origami/`. Python 3.11+ is required.
 
 ```bash
 python3 -m venv .venv

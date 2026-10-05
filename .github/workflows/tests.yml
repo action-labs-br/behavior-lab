@@ -6,6 +6,9 @@ on:
 
 jobs:
   cross-platform:
+    defaults:
+      run:
+        working-directory: projects/behavior-cloning-game
     strategy:
       fail-fast: false
       matrix:
@@ -20,6 +23,7 @@ jobs:
         with:
           python-version: "3.12"
           cache: pip
+          cache-dependency-path: projects/behavior-cloning-game/pyproject.toml
       - name: Install project
         run: python -m pip install -e ".[dev]"
       - name: Check dependencies
