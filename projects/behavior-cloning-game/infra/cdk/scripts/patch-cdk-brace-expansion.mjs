@@ -13,6 +13,20 @@ const readVersion = async (packagePath) => {
   return packageJson.version;
 };
 
+const isPatchedVersion = (version) => {
+  const match = /^(\d+)\.(\d+)\.(\d+)$/.exec(version);
+  if (!match) {
+    throw new Error(`Unexpected brace-expansion version format: ${version}`);
+  }
+
+  const [, major, minor, patch] = match.map(Number);
+  return (
+    major > 5 ||
+    (major === 5 && minor > 0) ||
+    (major === 5 && minor === 0 && patch >= 12)
+  );
+};
+
 const patchedVersion = await readVersion(patchedPackage);
 if (patchedVersion !== '5.0.12') {
   throw new Error(
@@ -32,8 +46,10 @@ try {
   throw error;
 }
 
-if (bundledVersion === patchedVersion) {
-  console.log(`aws-cdk-lib already bundles brace-expansion ${patchedVersion}`);
+if (isPatchedVersion(bundledVersion)) {
+  console.log(
+    `aws-cdk-lib already bundles patched brace-expansion ${bundledVersion}`,
+  );
 } else {
   await rm(bundledPackage, { recursive: true, force: true });
   await cp(patchedPackage, bundledPackage, { recursive: true });
