@@ -12,6 +12,7 @@ import json
 import logging
 import os
 import re
+import shutil
 import sys
 import tempfile
 import threading
@@ -71,6 +72,16 @@ class LocalObjectStore:
     def get_bytes(self, key: str) -> bytes | None:
         path = self._path(key)
         return path.read_bytes() if path.is_file() else None
+
+    def delete_object(self, key: str) -> None:
+        self._path(key).unlink(missing_ok=True)
+
+    def delete_prefix(self, prefix: str) -> None:
+        path = self._path(prefix.rstrip("/"))
+        if path.is_dir():
+            shutil.rmtree(path)
+        else:
+            path.unlink(missing_ok=True)
 
     def list_json(self, prefix: str) -> list[dict[str, Any]]:
         directory = self._path(prefix)
@@ -139,6 +150,19 @@ class S3ObjectStore:
             raise
         with response["Body"] as body:
             return body.read()
+
+    def delete_object(self, key: str) -> None:
+        self.client.delete_object(Bucket=self.bucket, Key=key)
+
+    def delete_prefix(self, prefix: str) -> None:
+        paginator = self.client.get_paginator("list_objects_v2")
+        for page in paginator.paginate(Bucket=self.bucket, Prefix=prefix.rstrip("/") + "/"):
+            objects = [{"Key": item["Key"]} for item in page.get("Contents", [])]
+            if objects:
+                self.client.delete_objects(
+                    Bucket=self.bucket,
+                    Delete={"Objects": objects, "Quiet": True},
+                )
 
     def list_json(self, prefix: str) -> list[dict[str, Any]]:
         records = []
@@ -237,7 +261,7 @@ app.add_middleware(
     CORSMiddleware,
     allow_origins=["http://127.0.0.1:5173", "http://localhost:5173"],
     allow_credentials=False,
-    allow_methods=["GET", "POST", "OPTIONS"],
+    allow_methods=["GET", "POST", "DELETE", "OPTIONS"],
     allow_headers=["Content-Type"],
 )
 
@@ -554,6 +578,52 @@ def create_dataset(project_id: str, payload: DatasetCreate) -> dict[str, Any]:
     return record
 
 
+def delete_evaluation_record(evaluation: dict[str, Any]) -> None:
+    evaluation_id = evaluation["id"]
+    if evaluation.get("trajectory_object_key"):
+        store.delete_object(evaluation["trajectory_object_key"])
+    store.delete_prefix(
+        f"projects/{evaluation['project_id']}/evaluation-artifacts/{evaluation_id}"
+    )
+    store.delete_object(evaluation_key(evaluation["project_id"], evaluation_id))
+    store.delete_object(f"indexes/evaluations/{evaluation_id}.json")
+
+
+def delete_training_run_record(metadata_key: str, run: dict[str, Any]) -> None:
+    for evaluation in store.list_json(f"projects/{run['project_id']}/evaluations"):
+        if evaluation.get("record_type") == "evaluation" and evaluation.get("training_run_id") == run["id"]:
+            delete_evaluation_record(evaluation)
+    store.delete_prefix(f"projects/{run['project_id']}/artifacts/{run['id']}")
+    store.delete_object(metadata_key)
+    store.delete_object(f"indexes/training-runs/{run['id']}.json")
+
+
+@app.delete("/api/v1/datasets/{dataset_id}")
+def delete_dataset(dataset_id: str) -> dict[str, str]:
+    found = find_record("dataset", dataset_id)
+    if found is None:
+        raise HTTPException(status_code=404, detail="Dataset not found")
+    metadata_key, dataset = found
+    training_runs = [
+        run for run in store.list_json(f"projects/{dataset['project_id']}/training-runs")
+        if run.get("record_type") == "training_run" and run.get("dataset_id") == dataset_id
+    ]
+    if any(run.get("status") in {"queued", "running", "cancel_requested"} for run in training_runs):
+        raise HTTPException(
+            status_code=409,
+            detail="Cancel or wait for related training runs before deleting this dataset",
+        )
+    for run in training_runs:
+        delete_training_run_record(
+            run_key(dataset["project_id"], run["id"]),
+            run,
+        )
+    store.delete_object(dataset["object_key"])
+    store.delete_object(metadata_key)
+    store.delete_object(f"indexes/datasets/{dataset_id}.json")
+    return {"deleted": dataset_id}
+
+
 def public_training_run(record: dict[str, Any]) -> dict[str, Any]:
     experiment = record.get("experiment") or {}
     metrics = experiment.get("metrics") or {}
@@ -705,6 +775,18 @@ def cancel_training_run(run_id: str) -> dict[str, Any]:
     return public_training_run(record)
 
 
+@app.delete("/api/v1/training-runs/{run_id}")
+def delete_training_run(run_id: str) -> dict[str, str]:
+    found = find_record("training_run", run_id)
+    if found is None:
+        raise HTTPException(status_code=404, detail="Training run not found")
+    metadata_key, run = found
+    if run.get("status") in {"queued", "running", "cancel_requested"}:
+        raise HTTPException(status_code=409, detail="Cancel or wait for the training run before deleting it")
+    delete_training_run_record(metadata_key, run)
+    return {"deleted": run_id}
+
+
 @app.get("/api/v1/projects/{project_id}/evaluations")
 def list_evaluations(project_id: str) -> list[dict[str, Any]]:
     if store.get_json(project_key(project_id)) is None:
@@ -812,6 +894,16 @@ def download_evaluation(evaluation_id: str) -> Response:
         content, media_type="application/json",
         headers={"Content-Disposition": f'attachment; filename="evaluation-{evaluation_id}.json"'},
     )
+
+
+@app.delete("/api/v1/evaluations/{evaluation_id}")
+def delete_evaluation(evaluation_id: str) -> dict[str, str]:
+    found = find_record("evaluation", evaluation_id)
+    if found is None:
+        raise HTTPException(status_code=404, detail="Evaluation not found")
+    _metadata_key, evaluation = found
+    delete_evaluation_record(evaluation)
+    return {"deleted": evaluation_id}
 
 
 @app.get("/api/v1/evaluations/{evaluation_id}/replay")

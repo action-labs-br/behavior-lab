@@ -71,6 +71,7 @@ Uploads use size-constrained presigned **POST**, an intentional adjustment from 
 ```bash
 python -m pytest -q
 node --check app/static/app.js
+node --test tests/test_upload_frontend.cjs
 PYTHONPATH=. python scripts/verify_encoder.py
 ```
 

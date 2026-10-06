@@ -1,5 +1,5 @@
 import { Amplify } from 'aws-amplify';
-import { fetchAuthSession, getCurrentUser, signInWithRedirect, signOut } from 'aws-amplify/auth';
+import { fetchAuthSession, fetchUserAttributes, getCurrentUser, signInWithRedirect, signOut } from 'aws-amplify/auth';
 import { cognitoUserPoolsTokenProvider } from 'aws-amplify/auth/cognito';
 import { CookieStorage } from 'aws-amplify/utils';
 
@@ -55,7 +55,14 @@ export async function currentSession(): Promise<{ signedIn: boolean; username: s
   if (!session.tokens?.accessToken) return { signedIn: false, username: null };
   try {
     const user = await getCurrentUser();
-    return { signedIn: true, username: user.username };
+    let username = user.username;
+    try {
+      const attributes = await fetchUserAttributes();
+      username = attributes.name?.trim() || username;
+    } catch {
+      // Keep the Cognito username as a fallback if the name attribute is unavailable.
+    }
+    return { signedIn: true, username };
   } catch {
     return { signedIn: true, username: null };
   }

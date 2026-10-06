@@ -13,6 +13,7 @@ RUN pip install --no-cache-dir \
     "torch==2.13.0+cpu"
 
 COPY game/util ${LAMBDA_TASK_ROOT}/util
+COPY game/downsamplers ${LAMBDA_TASK_ROOT}/downsamplers
 COPY web/__init__.py ${LAMBDA_TASK_ROOT}/web/__init__.py
 COPY web/api ${LAMBDA_TASK_ROOT}/web/api
 

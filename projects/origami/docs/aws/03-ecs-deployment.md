@@ -35,7 +35,7 @@ aws ecs monitor-express-gateway-service --service-arn "$SERVICE_ARN"
 aws ecs describe-express-gateway-service --service-arn "$SERVICE_ARN"
 ```
 
-Copy the HTTPS application URL returned by AWS. Set its exact origin, without a trailing slash, for the S3 browser upload policy:
+Set the exact HTTPS origin participants use, without a trailing slash, for the S3 browser upload policy. If participants use a custom domain, use that origin rather than only the ECS hostname. A missing origin can cause the browser to report a fetch error even after S3 saves the photo and returns 204. Include every supported application origin in `AllowedOrigins`, and keep `origin` in `.deploy/deployment.json` set to the participant URL so deployment verification checks it:
 
 ```bash
 export APP_ORIGIN=https://YOUR-ACTUAL-SERVICE-URL
