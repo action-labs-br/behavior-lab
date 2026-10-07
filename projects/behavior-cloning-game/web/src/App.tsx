@@ -2,7 +2,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import {
   ArrowDown, ArrowLeft, ArrowRight, ArrowUp, Check, ChevronRight,
   BarChart3, CircleHelp, Download, FolderKanban, Gamepad2, LoaderCircle, Pause,
-  LogOut, Play, Plus, RotateCcw, Sparkles, Target, Trophy, X,
+  LogOut, Play, Plus, RotateCcw, Sparkles, Target, Trash2, Trophy, X,
 } from 'lucide-react';
 import EvaluationReplay from './EvaluationReplay';
 import { accessToken, beginSignIn, currentSession, endSignIn, loadAuthConfig, type AuthConfig } from './auth';
@@ -68,6 +68,7 @@ function App() {
   const [featureTransform, setFeatureTransform] = useState('absolute');
   const [dropNoop, setDropNoop] = useState(false);
   const [startingRun, setStartingRun] = useState<string | null>(null);
+  const [deletingItem, setDeletingItem] = useState<string | null>(null);
   const [name, setName] = useState('My first project');
   const [collecting, setCollecting] = useState(false);
   const [paused, setPaused] = useState(false);
@@ -338,6 +339,59 @@ function App() {
     URL.revokeObjectURL(url);
   };
 
+  const deleteDataset = async (dataset: Dataset) => {
+    if (!window.confirm(`Delete dataset “${dataset.name}” and all training runs, policy artifacts, and evaluations created from it?`)) return;
+    setDeletingItem(dataset.id);
+    try {
+      const response = await apiFetch(`${API}/api/v1/datasets/${dataset.id}`, { method: 'DELETE' });
+      const result = await response.json();
+      if (!response.ok) throw new Error(result.detail ?? 'Could not delete dataset.');
+      const deletedRunIds = new Set(runs.filter((run) => run.dataset_id === dataset.id).map((run) => run.id));
+      const deletedEvaluationIds = new Set(evaluations.filter((item) => deletedRunIds.has(item.training_run_id)).map((item) => item.id));
+      setDatasets((current) => current.filter((item) => item.id !== dataset.id));
+      if (metricsDataset?.id === dataset.id) setMetricsDataset(null);
+      setRuns((current) => current.filter((run) => run.dataset_id !== dataset.id));
+      setEvaluations((current) => current.filter((item) => !deletedRunIds.has(item.training_run_id)));
+      if (selectedEvaluation && deletedEvaluationIds.has(selectedEvaluation)) setSelectedEvaluation(null);
+      setNotice(`Deleted dataset “${dataset.name}” and its related training runs and evaluations.`);
+    } catch (error) {
+      setNotice(error instanceof Error ? error.message : 'Could not delete dataset.');
+    } finally { setDeletingItem(null); }
+  };
+
+  const deleteTrainingRun = async (run: TrainingRun) => {
+    if (!window.confirm('Delete this training run, its policy artifacts, and its evaluations?')) return;
+    setDeletingItem(run.id);
+    try {
+      const response = await apiFetch(`${API}/api/v1/training-runs/${run.id}`, { method: 'DELETE' });
+      const result = await response.json();
+      if (!response.ok) throw new Error(result.detail ?? 'Could not delete training run.');
+      if (evaluations.some((item) => item.training_run_id === run.id && item.id === selectedEvaluation)) {
+        setSelectedEvaluation(null);
+      }
+      setRuns((current) => current.filter((item) => item.id !== run.id));
+      setEvaluations((current) => current.filter((item) => item.training_run_id !== run.id));
+      setNotice('Deleted the training run, its policy artifacts, and its evaluations.');
+    } catch (error) {
+      setNotice(error instanceof Error ? error.message : 'Could not delete training run.');
+    } finally { setDeletingItem(null); }
+  };
+
+  const deleteEvaluation = async (evaluation: Evaluation) => {
+    if (!window.confirm('Delete this policy evaluation and its replay data?')) return;
+    setDeletingItem(evaluation.id);
+    try {
+      const response = await apiFetch(`${API}/api/v1/evaluations/${evaluation.id}`, { method: 'DELETE' });
+      const result = await response.json();
+      if (!response.ok) throw new Error(result.detail ?? 'Could not delete evaluation.');
+      setEvaluations((current) => current.filter((item) => item.id !== evaluation.id));
+      if (selectedEvaluation === evaluation.id) setSelectedEvaluation(null);
+      setNotice('Deleted policy evaluation.');
+    } catch (error) {
+      setNotice(error instanceof Error ? error.message : 'Could not delete evaluation.');
+    } finally { setDeletingItem(null); }
+  };
+
   const showDatasetMetrics = async (dataset: Dataset) => {
     setMetricsDataset(dataset);
     setDatasetMetrics(null);
@@ -419,7 +473,7 @@ function App() {
       }));
     };
     return <article className="run-card" key={run.id}>
-      <div className="run-topline"><div className="run-icon"><Sparkles size={16} /></div><div className="run-name"><strong>{run.preset} policy</strong><small>{run.config.feature_transform.replaceAll('-', ' ')}{run.config.drop_noop ? ' · no-op dropped' : ''} · {new Date(run.created_at).toLocaleString()}</small></div><span className={`run-status ${run.status}`}>{run.status.replace('_', ' ')}</span>{['queued', 'running'].includes(run.status) && <button className="run-cancel" onClick={() => void cancelRun(run)}>Cancel</button>}</div>
+      <div className="run-topline"><div className="run-icon"><Sparkles size={16} /></div><div className="run-name"><strong>{run.preset} policy</strong><small>{run.config.feature_transform.replaceAll('-', ' ')}{run.config.drop_noop ? ' · no-op dropped' : ''} · {new Date(run.created_at).toLocaleString()}</small></div><span className={`run-status ${run.status}`}>{run.status.replace('_', ' ')}</span>{['queued', 'running'].includes(run.status) && <button className="run-cancel" onClick={() => void cancelRun(run)}>Cancel</button>}<button className="icon-button delete-button" title="Delete training run and its evaluations" aria-label="Delete training run and its evaluations" disabled={deletingItem === run.id || ['queued', 'running', 'cancel_requested'].includes(run.status)} onClick={() => void deleteTrainingRun(run)}><Trash2 size={15} /></button></div>
       {['queued', 'running', 'cancel_requested'].includes(run.status) && <><div className="progress-track"><span style={{ width: `${ratio}%` }} /></div><div className="progress-label"><span>{run.status === 'queued' ? 'Waiting for the worker' : `Epoch ${progress.epoch} of ${progress.epochs_total}`}</span><span>{latestLoss === undefined ? 'Preparing data…' : `Validation loss ${latestLoss.toFixed(4)}`}</span></div></>}
       {run.status === 'completed' && <div className="run-result"><span><Check size={14} /> Best epoch {run.metrics?.best_epoch ?? '—'}</span><span>Validation loss {run.metrics?.final_validation_loss?.toFixed(4) ?? '—'}</span><div className="eval-inline-options"><label>EPISODES<input type="number" min={1} max={50} value={evaluation.episodes} onChange={(event) => updateEvaluation('episodes', Math.min(50, Math.max(1, Number(event.target.value))))} /></label><label>SEED<input type="number" min={0} max={2147483647} value={evaluation.seed} onChange={(event) => updateEvaluation('seed', Math.min(2147483647, Math.max(0, Number(event.target.value))))} /></label></div><button className="button train-button evaluate-button" disabled={evaluatingRun !== null} onClick={() => void evaluateRun(run)}>{evaluatingRun === run.id ? <LoaderCircle className="spin" size={14} /> : <Target size={14} />}{evaluatingRun === run.id ? 'Evaluating…' : 'Evaluate policy'}</button></div>}
       {run.status === 'failed' && <div className="run-error">{run.error_message ?? 'Training failed. Try again with another preset.'}</div>}
@@ -491,6 +545,7 @@ function App() {
                 <div className="dataset-metric"><strong>{Math.round((dataset.outcomes.success ?? 0) / Math.max(1, dataset.episode_count) * 100)}%</strong><small>success</small></div>
                 <button className="icon-button" title={`View ${dataset.name} metrics`} aria-label={`View ${dataset.name} metrics`} onClick={() => void showDatasetMetrics(dataset)}><BarChart3 size={16} /></button>
                 <button className="icon-button download" aria-label={`Download ${dataset.name} CSV`} onClick={() => void downloadCsv(dataset)}><Download size={16} /></button>
+                <button className="icon-button delete-button" title={`Delete ${dataset.name}`} aria-label={`Delete ${dataset.name}`} disabled={deletingItem === dataset.id} onClick={() => void deleteDataset(dataset)}>{deletingItem === dataset.id ? <LoaderCircle className="spin" size={15} /> : <Trash2 size={15} />}</button>
               </div>
               <details className="dataset-teach">
                 <summary><Sparkles size={14} /> Teach your policy</summary>
@@ -510,7 +565,7 @@ function App() {
           <section className="evaluation-section" id="policy-evaluations">
             <div className="training-heading"><div><div className="section-kicker">POLICY EVALUATIONS</div><h2>See what it learned</h2></div><span>SEEDED · REPRODUCIBLE</span></div>
             {evaluations.length > 0 && <div className="evaluation-list">{evaluations.map((evaluation) => <article className="evaluation-card" key={evaluation.id}>
-              <div className="evaluation-summary"><div className="run-icon"><Target size={16} /></div><div className="run-name"><strong>{Math.round(evaluation.metrics.success_rate * 100)}% success</strong><small>{evaluation.config.episodes} episodes · seed {evaluation.config.seed} · {new Date(evaluation.created_at).toLocaleString()}</small></div><span className="run-status completed">{evaluation.metrics.successes}/{evaluation.metrics.episodes} passed</span><button className="button train-button" onClick={() => setSelectedEvaluation((current) => current === evaluation.id ? null : evaluation.id)}>{selectedEvaluation === evaluation.id ? 'Hide replay' : 'View replay'}</button><button className="icon-button download" title="Download evaluation JSON" aria-label="Download evaluation JSON" onClick={() => void downloadEvaluation(evaluation)}><Download size={16} /></button></div>
+              <div className="evaluation-summary"><div className="run-icon"><Target size={16} /></div><div className="run-name"><strong>{Math.round(evaluation.metrics.success_rate * 100)}% success</strong><small>{evaluation.config.episodes} episodes · seed {evaluation.config.seed} · {new Date(evaluation.created_at).toLocaleString()}</small></div><span className="run-status completed">{evaluation.metrics.successes}/{evaluation.metrics.episodes} passed</span><button className="button train-button" onClick={() => setSelectedEvaluation((current) => current === evaluation.id ? null : evaluation.id)}>{selectedEvaluation === evaluation.id ? 'Hide replay' : 'View replay'}</button><button className="icon-button download" title="Download evaluation JSON" aria-label="Download evaluation JSON" onClick={() => void downloadEvaluation(evaluation)}><Download size={16} /></button><button className="icon-button delete-button" title="Delete evaluation" aria-label="Delete evaluation" disabled={deletingItem === evaluation.id} onClick={() => void deleteEvaluation(evaluation)}>{deletingItem === evaluation.id ? <LoaderCircle className="spin" size={15} /> : <Trash2 size={15} />}</button></div>
               <div className="evaluation-metrics"><span>Mean successful steps <b>{evaluation.metrics.mean_successful_steps?.toFixed(1) ?? '—'}</b></span><span>Median <b>{evaluation.metrics.median_successful_steps?.toFixed(1) ?? '—'}</b></span><span>Stalled <b>{evaluation.metrics.stalled}</b></span><span>Out of bounds <b>{evaluation.metrics.out_of_bounds}</b></span></div>
               {selectedEvaluation === evaluation.id && <EvaluationReplay evaluation={evaluation} apiFetch={apiFetch} />}
             </article>)}</div>}

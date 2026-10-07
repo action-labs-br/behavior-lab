@@ -7,6 +7,9 @@
 .train-button{padding:7px 9px;font-size:10px;color:#3776cc;background:#eef5ff;border:1px solid #dbe9fc}
 .train-button:hover{background:#e1efff}
 .train-button:disabled{color:#9ba6b3;background:#f7f8fa;border-color:#edf0f3;cursor:not-allowed;transform:none}
+.delete-button{color:#b45d58}
+.delete-button:hover{background:#fff0ef;color:#a63f39}
+.delete-button:disabled{opacity:.45;cursor:not-allowed}
 .dataset-item+.dataset-item{border-top:1px solid #edf0f3}
 .dataset-row{border-bottom:0}
 .dataset-teach{border-top:1px solid #f0f2f5;padding:0 14px}

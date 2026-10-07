@@ -17,6 +17,7 @@ run:
 test:
 	$(VENV_PYTHON) -m pytest -q
 	node --check app/static/app.js
+	node --test tests/test_upload_frontend.cjs
 
 deploy: test
 	bash scripts/deploy.sh

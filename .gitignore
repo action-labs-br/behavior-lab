@@ -211,7 +211,9 @@ projects/behavior-cloning-game/web/node_modules/
 projects/behavior-cloning-game/web/dist/
 .local-data/
 projects/behavior-cloning-game/infra/cdk/cdk.out/
+infra/cdk/cdk.out/
 projects/behavior-cloning-game/infra/cdk/.cdk.staging/
+projects/behavior-cloning-game/infra/cdk/node_modules/
 projects/behavior-cloning-game/game/data/*
 !projects/behavior-cloning-game/game/data/fixtures/
 !projects/behavior-cloning-game/game/data/fixtures/**

@@ -54,6 +54,7 @@ with httpx.Client(base_url=base, headers={'X-Origami-Request':'1'}, timeout=45) 
             upload = httpx.post(url,data=fields,files={'file':('verification.png',output.getvalue(),'image/png')},headers={'Origin':base},timeout=30)
             if upload.is_error:
                 raise RuntimeError(f'S3 upload failed: {upload.status_code} {upload.text[:500]}')
+            assert upload.headers.get('access-control-allow-origin') == base, 'S3 upload response CORS mismatch'
             assert api('POST',f'/api/samples/{sample_id}/complete')['status'] == 'READY'
             return sample_id
 

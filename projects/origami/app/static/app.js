@@ -49,6 +49,9 @@ async function renderRun() {
   run = await api(`/api/runs/${run.id}`);
   const finished = run.status === 'COMPLETE';
   show('start', false); show('finished', finished); show('fold', !finished);
+  show('toggle-participant-inference', finished);
+  show('participant-inference', false);
+  $('toggle-participant-inference').setAttribute('aria-expanded', 'false');
   if (finished) return;
   const step = experiment.steps[run.step_index];
   const stage = run.stage || (run.sample?.status === 'READY' ? 'ACTION' : 'CURRENT_PHOTO');
@@ -76,6 +79,12 @@ form('join-form', '/api/session/join', async () => { await boot(); await start()
 form('admin-form', '/api/admin/login', boot);
 action('leave', async () => { await api('/api/session/leave', {method:'POST'}); location.href = '/'; });
 action('start', start); action('again', start);
+action('toggle-participant-inference', async () => {
+  if (run && run.status !== 'COMPLETE') return;
+  const visible = $('participant-inference').hidden;
+  show('participant-inference', visible);
+  $('toggle-participant-inference').setAttribute('aria-expanded', String(visible));
+});
 $('photo').addEventListener('change', () => {
   const file = $('photo').files[0]; $('upload').disabled = !file;
   if (previewURL) URL.revokeObjectURL(previewURL);
@@ -88,13 +97,19 @@ async function uploadSample(file, stepIndex) {
   const {sample, upload} = await api('/api/samples', {method:'POST', body:{run_id:run.id, step_index:stepIndex, content_type:file.type}});
   if (upload) {
     let response;
-    if (upload.fields) {
-      const body = new FormData();
-      for (const [key,value] of Object.entries(upload.fields)) body.append(key,value);
-      body.append('file', file);
-      response = await fetch(upload.url, {method:'POST', body});
-    } else response = await fetch(upload.url, {method:'PUT', headers:{'X-Origami-Request':'1'}, body:file});
-    if (!response.ok) throw new Error(t('Upload failed. Your step is saved; try again.'));
+    try {
+      if (upload.fields) {
+        const body = new FormData();
+        for (const [key,value] of Object.entries(upload.fields)) body.append(key,value);
+        body.append('file', file);
+        response = await fetch(upload.url, {method:'POST', body});
+      } else response = await fetch(upload.url, {method:'PUT', headers:{'X-Origami-Request':'1'}, body:file});
+    } catch (error) {
+      // S3 may save the photo even when CORS blocks its response. Completion
+      // verifies the stored image; it must succeed before we reveal the fold.
+      if (!upload.fields || !(error instanceof TypeError)) throw error;
+    }
+    if (response && !response.ok) throw new Error(t('Upload failed. Your step is saved; try again.'));
     await api(`/api/samples/${sample.id}/complete`, {method:'POST'});
   }
   await renderRun();
